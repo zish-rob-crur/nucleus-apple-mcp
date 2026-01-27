@@ -1,0 +1,32 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "root"
+    },
+    {
+      "path": "src/nucleus_apple_mcp/sidecar/swift",
+      "name": "sidecar-swift"
+    }
+  ],
+  "settings": {
+    "editor.formatOnSave": true,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "python.analysis.extraPaths": [
+      "${workspaceFolder}/src"
+    ],
+    "python.analysis.typeCheckingMode": "strict",
+    "python.testing.pytestEnabled": false,
+    "python.testing.unittestEnabled": false
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "charliermarsh.ruff",
+      "swiftlang.swift-vscode",
+      "vadimcn.vscode-lldb"
+    ]
+  }
+}

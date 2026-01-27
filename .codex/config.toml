@@ -1,0 +1,4 @@
+[mcp_servers.nucleus-apple-mcp]
+command = "uv"
+args = ["run", "nucleus-apple-mcp"]
+startup_timeout_sec = 60
