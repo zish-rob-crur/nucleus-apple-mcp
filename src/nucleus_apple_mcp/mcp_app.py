@@ -7,8 +7,11 @@ from .tools.reminders import reminders_router
 
 
 def create_app() -> FastMCP:
-    return FastMCP(
+    app = FastMCP(
         name="nucleus-apple-mcp",
         instructions="Nucleus Apple MCP server (macOS EventKit via Swift sidecar).",
-        providers=[calendar_router, reminders_router],
     )
+
+    app.mount(calendar_router)
+    app.mount(reminders_router)
+    return app

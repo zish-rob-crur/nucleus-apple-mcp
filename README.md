@@ -8,10 +8,15 @@ Unlike fragile PyObjC bridges, **Nucleus** uses a hybrid architecture: a Python 
 
 ## 🔌 Integrations
 
+### ✅ Available (current release)
+
 * **📅 Calendar:** Fetch upcoming schedules, check availability, and create events via `EventKit`.
 * **✅ Reminders:** Read pending tasks and manage your to-do lists via `EventKit`.
-* **📝 Notes:** Access your Apple Notes database (The "Second Brain" memory layer).
-* **❤️ Health:** Ingest health metrics (Sleep, HR, Activity) via iOS-to-Mac iCloud exports.
+
+### 🚧 Planned (not implemented yet)
+
+* **📝 Notes:** Access your Apple Notes database (the "Second Brain" memory layer).
+* **❤️ Health:** Ingest health metrics (sleep, heart rate, activity) via iOS-to-Mac iCloud exports.
 
 ### 🏗 Architecture
 
@@ -30,4 +35,28 @@ Unlike fragile PyObjC bridges, **Nucleus** uses a hybrid architecture: a Python 
 # No manual compilation required.
 # The Python wrapper handles the local Swift build automatically.
 uvx nucleus-apple-mcp
+```
+
+## 🔧 Add as an MCP server
+
+This server uses the **stdio** transport (a local subprocess). The first run will compile the Swift sidecar.
+
+### Codex CLI
+
+```bash
+# Add the server (writes to ~/.codex/config.toml)
+codex mcp add nucleus-apple -- uvx nucleus-apple-mcp
+
+# Verify
+codex mcp list
+```
+
+### Claude Code
+
+```bash
+# Add the server (use --scope user to make it available globally)
+claude mcp add --scope user nucleus-apple -- uvx nucleus-apple-mcp
+
+# Verify
+claude mcp list
 ```

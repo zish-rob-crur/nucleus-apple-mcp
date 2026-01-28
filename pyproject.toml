@@ -1,11 +1,16 @@
 [project]
 name = "nucleus-apple-mcp"
-version = "0.1.0"
+version = "0.2.1"
 description = "Nucleus Apple MCP server (macOS EventKit via Swift sidecar)."
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [{ name = "zish-rob-crur", email = "me@zish-rob-crur.com" }]
 requires-python = ">=3.10"
-dependencies = ["fastmcp>=3.0.0b1,<4", "pydantic>=2.11.7"]
+dependencies = ["fastmcp>=2.14.4,<3", "httpx>=0.28.1,<1.0.dev0", "pydantic>=2.11.7"]
+
+[project.urls]
+Homepage = "https://github.com/zish-rob-crur/nucleus-apple-mcp"
+Repository = "https://github.com/zish-rob-crur/nucleus-apple-mcp"
+Issues = "https://github.com/zish-rob-crur/nucleus-apple-mcp/issues"
 
 [project.scripts]
 nucleus-apple-mcp = "nucleus_apple_mcp:main"
