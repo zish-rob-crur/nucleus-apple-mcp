@@ -12,10 +12,10 @@ Unlike fragile PyObjC bridges, **Nucleus** uses a hybrid architecture: a Python 
 
 * **📅 Calendar:** Fetch upcoming schedules, check availability, and create events via `EventKit`.
 * **✅ Reminders:** Read pending tasks and manage your to-do lists via `EventKit`.
+* **📝 Notes:** List/search notes, read content, and add/export attachments via Notes.app (Apple Events).
 
 ### 🚧 Planned (not implemented yet)
 
-* **📝 Notes:** Access your Apple Notes database (the "Second Brain" memory layer).
 * **❤️ Health:** Ingest health metrics (sleep, heart rate, activity) via iOS-to-Mac iCloud exports.
 
 ### 🏗 Architecture
