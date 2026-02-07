@@ -28,5 +28,29 @@
       "swiftlang.swift-vscode",
       "vadimcn.vscode-lldb"
     ]
+  },
+  "launch": {
+    "configurations": [
+      {
+        "type": "swift",
+        "request": "launch",
+        "args": [],
+        "cwd": "${workspaceFolder:sidecar-swift}",
+        "name": "Debug nucleus-apple-sidecar (sidecar-swift)",
+        "target": "nucleus-apple-sidecar",
+        "configuration": "debug",
+        "preLaunchTask": "swift: Build Debug nucleus-apple-sidecar (sidecar-swift)"
+      },
+      {
+        "type": "swift",
+        "request": "launch",
+        "args": [],
+        "cwd": "${workspaceFolder:sidecar-swift}",
+        "name": "Release nucleus-apple-sidecar (sidecar-swift)",
+        "target": "nucleus-apple-sidecar",
+        "configuration": "release",
+        "preLaunchTask": "swift: Build Release nucleus-apple-sidecar (sidecar-swift)"
+      }
+    ]
   }
 }
