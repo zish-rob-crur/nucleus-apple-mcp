@@ -14,9 +14,10 @@ v0.1 tightens the v0 design for correctness under real-world constraints:
 ## 1. Scope & Constraints
 
 - Module name: **health**
-- Data collection runtime: **iOS companion app only** (no direct macOS HealthKit collection in v0.x).
+- Data collection runtime: **iOS companion app (Nucleus) only** (no direct macOS HealthKit collection in v0.x).
 - v0.x is **read-only for downstream agents** (no write-back to HealthKit).
-- v0.x uploads **aggregated metrics only** (daily buckets), not raw samples.
+- v0.x uploads **aggregated metrics only** (daily buckets).
+- v1 optionally uploads **raw samples** (JSONL) for agent-grade analysis and feature derivation.
 - Supports two storage backends:
   - `icloud_drive` (Documents folder under the app’s iCloud ubiquity container)
   - `s3_object_store`
@@ -26,7 +27,7 @@ v0.1 tightens the v0 design for correctness under real-world constraints:
 Out of scope in v0.x:
 
 - ECG/clinical records
-- raw-sample export APIs
+- raw-sample export APIs (v1 introduces raw JSONL exports; v0.x remains aggregates-only)
 - server-side databases/indexing services (v0.x is “direct file read”)
 - complex on-demand triggers (push notifications)
 
@@ -34,7 +35,7 @@ Out of scope in v0.x:
 
 ## 2. Terminology
 
-- **Collector**: iOS app component that reads HealthKit and uploads health daily data files.
+- **Collector**: iOS app (Nucleus) component that reads HealthKit and uploads health daily data files.
 - **Storage**: iCloud Drive (Documents) or S3 bucket/prefix where files are deposited.
 - **Day**: a reporting day with explicit timezone and `[start, end)` boundaries.
 - **Revision**: an immutable file representing one generated snapshot for a specific day.
@@ -124,6 +125,24 @@ Semantics:
 - `revision_relpath` is relative to `health/v0/data/{YYYY}/{MM}/{DD}/`.
 - MCP must verify the referenced revision exists and is parseable; otherwise it must fall back to scanning `revisions/`.
 
+### 5.5 Object Store Mapping (s3_object_store)
+
+When using the `s3_object_store` backend, the Collector uploads the same files it writes locally, using an object key that preserves the relative path under the local root:
+
+- Local root: `.../Documents/`
+- Object key: `{prefix(optional)}/{relative_path_from_documents}`
+
+Example:
+
+- Local: `Documents/health/v0/data/2026/02/21/revisions/20260221T115720Z-FF283A.json`
+- Object key: `health/v0/data/2026/02/21/revisions/20260221T115720Z-FF283A.json`
+
+Notes:
+
+- S3-compatible stores are acceptable as long as they support SigV4 (e.g. Cloudflare R2).
+- For Cloudflare R2, the S3 “region” is typically `auto` and a custom endpoint is required.
+- Do not hardcode long-lived access keys in the app; prefer Keychain for local-only dev and use short-lived credentials or pre-signed URLs for production.
+
 ---
 
 ## 6. Daily Revision File Schema (v0)
@@ -196,6 +215,117 @@ Rules:
 - `no_data`: authorized but HealthKit had no data for that interval
 - `unauthorized`: collector did not have permission to read that metric
 - `unsupported`: metric not supported on this device/OS configuration
+
+---
+
+## 6.4 Raw Samples Export (v1, JSONL) (Optional)
+
+v1 adds an optional raw export stream intended for “agent-grade” analysis. It is complementary to the v0 daily aggregates:
+
+- v0 answers “what happened today?” quickly and stably.
+- v1 enables downstream recomputation: feature engineering, anomaly detection, and richer longitudinal analysis.
+
+### 6.4.1 File Path
+
+Samples:
+
+`health/v1/raw/data/{YYYY}/{MM}/{DD}/revisions/{REVISION_ID}.jsonl`
+
+Meta:
+
+`health/v1/raw/data/{YYYY}/{MM}/{DD}/revisions/{REVISION_ID}.meta.json`
+
+### 6.4.2 Format (JSON Lines)
+
+- The samples file MUST be UTF-8 text in JSONL (one JSON object per line).
+- Each line in the samples file is a **sample record** (`record = "sample"`).
+- The meta file is a single JSON object (not JSONL) describing the revision.
+
+### 6.4.3 Meta File (`*.meta.json`)
+
+```json
+{
+  "record": "meta",
+  "schema_version": "health.raw.v1",
+  "date": "2026-02-21",
+  "day": { "timezone": "Asia/Shanghai", "start": "2026-02-21T00:00:00+08:00", "end": "2026-02-22T00:00:00+08:00" },
+  "generated_at": "2026-02-21T11:57:20Z",
+  "collector": { "collector_id": "...", "device_id": "..." },
+  "type_status": { "heart_rate": "ok", "sleep_analysis": "unauthorized" },
+  "type_counts": { "heart_rate": 2450, "sleep_analysis": 0 }
+}
+```
+
+Rules:
+
+- `type_status[k]` MUST be one of: `ok | no_data | unauthorized | unsupported`.
+- If `type_status[k] != "ok"`, then `type_counts[k]` MUST be `0`.
+
+### 6.4.4 Sample Records (JSONL Lines)
+
+Each sample record represents a single HealthKit sample (quantity/category/workout).
+
+Quantity sample example:
+
+```json
+{
+  "record": "sample",
+  "kind": "quantity",
+  "key": "heart_rate",
+  "hk_identifier": "HKQuantityTypeIdentifierHeartRate",
+  "uuid": "…",
+  "start": "2026-02-21T10:12:00+08:00",
+  "end": "2026-02-21T10:12:00+08:00",
+  "value": 72.0,
+  "unit": "bpm",
+  "source_bundle_id": "com.apple.health",
+  "source_name": "Health",
+  "device_model": "iPhone",
+  "device_manufacturer": "Apple",
+  "was_user_entered": false
+}
+```
+
+Sleep category sample example:
+
+```json
+{
+  "record": "sample",
+  "kind": "category",
+  "key": "sleep_analysis",
+  "hk_identifier": "HKCategoryTypeIdentifierSleepAnalysis",
+  "uuid": "…",
+  "start": "2026-02-21T00:30:00+08:00",
+  "end": "2026-02-21T07:10:00+08:00",
+  "category_value": 0,
+  "category_label": "in_bed",
+  "source_bundle_id": "com.apple.health",
+  "source_name": "Health"
+}
+```
+
+Workout sample example:
+
+```json
+{
+  "record": "sample",
+  "kind": "workout",
+  "key": "workout",
+  "uuid": "…",
+  "start": "2026-02-21T18:10:00+08:00",
+  "end": "2026-02-21T18:55:00+08:00",
+  "workout_activity_type": 37,
+  "duration_sec": 2700,
+  "total_energy_kcal": 420.5,
+  "total_distance_m": 5100
+}
+```
+
+Notes:
+
+- `start`/`end` MUST be ISO-8601 with an explicit timezone offset.
+- Canonical units: `count | kcal | bpm | ms | m | sec`.
+- Raw export is append-only and uses the same `REVISION_ID` format as v0.
 
 ---
 
@@ -319,7 +449,7 @@ Returns:
 ## 13. Security & Privacy
 
 - Collector writes only to private user storage (iCloud Drive / private S3 prefix).
-- No raw samples are exported in v0.x; only daily aggregates are uploaded.
+- v0.x exports only daily aggregates. v1 optionally exports raw samples (JSONL) under `health/v1/raw/...`.
 - MCP reads from storage with user-provided credentials; there is no intermediate ingest server.
 
 ---
@@ -329,6 +459,13 @@ Returns:
 - iOS app uploads append-only daily revisions under `health/v0/...`.
 - “Latest” resolution is correct under retries/races (no older revision can overwrite newer data).
 - MCP can read single-day and range results, with explicit missing/unauthorized semantics.
+
+---
+
+## 15. Product Naming & Design Language (Non-normative)
+
+- iOS companion app (Collector) product name: **Nucleus**
+- Design language recommendation: use Apple Human Interface Guidelines (HIG) as the baseline (SwiftUI / SF Pro / Dynamic Type / Dark Mode / Accessibility). Keep a neutral, restrained, trustworthy tone (not health-only branding). Prefer a “neutral surfaces + single accent color” token system. Information architecture should foreground provenance, `generated_at`, and authorization/missing states via `metric_status`, with global visibility for connection/sync status.
 
 ---
 
