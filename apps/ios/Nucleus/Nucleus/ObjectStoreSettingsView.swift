@@ -251,9 +251,9 @@ private extension ObjectStoreSettingsView {
     var statusLabel: String {
         let configured = model.resolvedObjectStoreConfig(requireEnabled: false) != nil
         if configured {
-            return enabled ? "ready" : "configured"
+            return enabled ? "Ready" : "Configured"
         }
-        return enabled ? "needs_setup" : "off"
+        return enabled ? "Needs Setup" : "Off"
     }
 
     var statusKind: StatusPill.Kind {

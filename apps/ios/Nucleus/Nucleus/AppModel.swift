@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import HealthKit
 import Security
+import UIKit
 
 enum AppModelError: Error, LocalizedError {
     case keychain(OSStatus)
@@ -29,13 +30,20 @@ final class AppModel: ObservableObject {
     @Published var objectStoreHasCredentials: Bool
     @Published var lastObjectStoreTest: ObjectStoreTestResult?
     @Published var storageStatus: StorageStatus?
+    @Published var anchorDiagnostics: HealthAnchorDiagnostics = .empty
+    @Published var backgroundDeliveryStatus: BackgroundDeliveryStatus = .idle
     @Published var lastError: String?
     @Published var logs: [LogLine] = []
 
     private let collector = HealthCollector()
     private let storage = RevisionStorage()
+    private let anchorStore = HealthAnchorStore()
     private let objectStoreUploader = S3ObjectStoreUploader()
     private let identity: CollectorIdentity
+    private var healthObserverToken: NSObjectProtocol?
+    private var pendingObserverEvents: [HealthObserverEvent] = []
+    private var pendingObserverTypeKeys: Set<String> = []
+    private var observerBackgroundTaskID: UIBackgroundTaskIdentifier = .invalid
 
     init() {
         let defaults = UserDefaults.standard
@@ -46,7 +54,12 @@ final class AppModel: ObservableObject {
         self.identity = Self.loadOrCreateIdentity()
         self.objectStoreSettings = ObjectStoreSettingsStore.loadSettings()
         self.objectStoreHasCredentials = ObjectStoreSettingsStore.loadCredentials() != nil
-        Task { await refreshAuthStatus() }
+        registerHealthObserverNotifications()
+        collector.ensureObserverQueriesRunning()
+        Task {
+            await refreshAuthStatus()
+            await refreshAnchorDiagnostics()
+        }
         refreshStorageStatus(preferICloud: preferICloud)
     }
 
@@ -62,6 +75,38 @@ final class AppModel: ObservableObject {
 
     func refreshAuthStatus() async {
         authRequestStatus = await collector.authorizationRequestStatus()
+        switch authRequestStatus {
+        case .unnecessary:
+            await configureHealthObserversIfPossible()
+        case .shouldRequest:
+            backgroundDeliveryStatus = .needsAuthorization
+        case .unknown:
+            backgroundDeliveryStatus = .idle
+        @unknown default:
+            backgroundDeliveryStatus = .idle
+        }
+    }
+
+    func refreshAnchorDiagnostics() async {
+        anchorDiagnostics = await anchorStore.diagnostics(expectedTypeKeys: HealthCollector.incrementalTypeKeys)
+    }
+
+    func configureHealthObserversIfPossible() async {
+        let result = await collector.ensureBackgroundDeliveryEnabled()
+
+        if !result.errors.isEmpty {
+            backgroundDeliveryStatus = .error(result.errors)
+            for (typeKey, message) in result.errors.sorted(by: { $0.key < $1.key }) {
+                log(.error, "Background delivery failed for \(typeKey): \(message)")
+            }
+            return
+        }
+
+        let enabledKeys = result.enabledDeliveryKeys
+        backgroundDeliveryStatus = .ready(enabledKeys)
+        if !enabledKeys.isEmpty {
+            log(.success, "Background delivery enabled for \(enabledKeys.joined(separator: ", ")).")
+        }
     }
 
     func refreshStorageStatus(preferICloud: Bool = true) {
@@ -94,68 +139,138 @@ final class AppModel: ObservableObject {
     }
 
     func syncNow(catchUpDays: Int = 7) {
-        guard !isSyncing else { return }
+        _ = startSync(catchUpDays: catchUpDays, source: .manual)
+    }
+
+    @discardableResult
+    private func startSync(catchUpDays: Int, source: SyncSource) -> Bool {
+        if isSyncing {
+            if case .observer(let typeKeys) = source {
+                pendingObserverTypeKeys.formUnion(typeKeys)
+                log(.info, "Queued observer sync while another sync is running.")
+            }
+            return false
+        }
+
         guard let storageStatus else {
             lastError = "Storage is not configured."
-            return
+            if case .observer = source {
+                completePendingObserverEvents()
+            }
+            return false
         }
 
         isSyncing = true
         lastError = nil
-        log(.info, "Sync started (\(catchUpDays)d catch-up)…")
+        log(.info, source.startMessage(windowDays: catchUpDays))
 
         Task {
-            defer { isSyncing = false }
+            defer { finalizeSyncCycle() }
 
             let timeZone = TimeZone.current
-            var calendar = Calendar(identifier: .gregorian)
-            calendar.timeZone = timeZone
-            let today = calendar.startOfDay(for: Date())
             let objectStoreConfig = resolvedObjectStoreConfig()
             if let objectStoreConfig {
                 log(.info, "Object store enabled → s3://\(objectStoreConfig.bucket)/\(objectStoreConfig.prefix.isEmpty ? "" : objectStoreConfig.prefix + "/")…")
             }
 
             do {
-                for offset in 0..<max(1, catchUpDays) {
-                    guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
-                    let ymd = DateFormatting.ymdString(from: date, in: timeZone)
+                let syncPlan = await collector.prepareIncrementalSyncPlan(
+                    catchUpDays: catchUpDays,
+                    timeZone: timeZone,
+                    anchorStore: anchorStore
+                )
+
+                for (typeKey, message) in syncPlan.stats.typeErrors.sorted(by: { $0.key < $1.key }) {
+                    log(.error, "Anchor sync skipped for \(typeKey): \(message)")
+                }
+
+                if !syncPlan.stats.primedTypeKeys.isEmpty {
+                    log(.info, "Primed anchors for \(syncPlan.stats.primedTypeKeys.sorted().joined(separator: ", ")).")
+                }
+
+                if syncPlan.stats.bootstrapWindowUsed {
+                    log(.info, "Using \(catchUpDays)d bootstrap window.")
+                }
+
+                if syncPlan.stats.fallbackWindowUsed {
+                    log(.info, "Using \(catchUpDays)d fallback window for unresolved deletions.")
+                }
+
+                if syncPlan.affectedDates.isEmpty {
+                    log(.info, "No HealthKit changes since the last sync.")
+                    return
+                }
+
+                let commitId = RevisionId.generate(now: Date())
+                var commitChanges: [HealthCommitDateChange] = []
+
+                for ymd in syncPlan.affectedDates {
+                    guard let date = DateFormatting.date(from: ymd, in: timeZone) else {
+                        throw RevisionStorageError.invalidDate(ymd)
+                    }
+                    let rawManifestRelpath = RevisionStorage.rawManifestRelpath(for: ymd)
                     log(.info, "Collecting \(ymd)…")
 
-                    let (revision, generatedAt) = try await collector.makeDailyRevision(for: date, timeZone: timeZone, collector: identity)
-                    let revisionId = RevisionId.generate(now: generatedAt)
-                    let written = try storage.writeDailyRevision(revision, revisionId: revisionId, storage: storageStatus)
+                    let (revision, generatedAt) = try await collector.makeDailyRevision(
+                        for: date,
+                        timeZone: timeZone,
+                        collector: identity,
+                        commitId: commitId,
+                        rawManifestRelpath: rawManifestRelpath
+                    )
+                    let written = try storage.writeDailyRevision(revision, storage: storageStatus)
 
                     let raw = await collector.exportRawSamples(for: date, timeZone: timeZone, collector: identity, generatedAt: generatedAt)
-                    let rawWritten = try storage.writeRawSamples(raw, revisionId: revisionId, storage: storageStatus)
+                    let rawWritten = try storage.writeRawSamples(raw, revisionId: commitId, storage: storageStatus)
 
-                    if offset == 0 {
+                    commitChanges.append(
+                        HealthCommitDateChange(
+                            date: ymd,
+                            dailyRelpath: RevisionStorage.dailyDateRelpath(for: ymd),
+                            monthRelpath: RevisionStorage.dailyMonthRelpath(for: ymd),
+                            rawManifestRelpath: rawManifestRelpath,
+                            rawTypeKeys: syncPlan.changedTypeKeysByDate[ymd] ?? raw.meta.typeStatus.keys.sorted()
+                        )
+                    )
+
+                    if commitChanges.count == 1 {
                         latestRevision = revision
                         lastWritten = written
                         lastRawWritten = rawWritten
                     }
 
-                    log(.success, "Wrote \(ymd) → \(written.revisionId)")
+                    log(.success, "Wrote \(ymd) → \(written.dailyURL.lastPathComponent)")
                     let rawCount = raw.meta.typeCounts.values.reduce(0, +)
-                    log(.success, "Wrote raw \(ymd) → \(rawWritten.revisionId) (\(rawCount) samples)")
+                    log(.success, "Wrote raw \(ymd) → \(rawWritten.manifestURL.lastPathComponent) (\(rawCount) samples)")
 
                     if let objectStoreConfig {
-                        do {
-                            let putRevision = try await objectStoreUploader.putFile(written.revisionURL, relativeTo: storageStatus.rootURL, config: objectStoreConfig)
-                            let putLatest = try await objectStoreUploader.putFile(written.latestURL, relativeTo: storageStatus.rootURL, config: objectStoreConfig)
-                            let putRaw = try await objectStoreUploader.putFile(rawWritten.rawURL, relativeTo: storageStatus.rootURL, config: objectStoreConfig)
-                            let putMeta = try await objectStoreUploader.putFile(rawWritten.metaURL, relativeTo: storageStatus.rootURL, config: objectStoreConfig)
-
-                            log(.success, "Uploaded \(ymd) → s3://\(objectStoreConfig.bucket)/\(putRevision.key)")
-                            log(.success, "Uploaded \(ymd) → s3://\(objectStoreConfig.bucket)/\(putLatest.key)")
-                            log(.success, "Uploaded \(ymd) → s3://\(objectStoreConfig.bucket)/\(putRaw.key)")
-                            log(.success, "Uploaded \(ymd) → s3://\(objectStoreConfig.bucket)/\(putMeta.key)")
-                        } catch {
-                            lastError = error.localizedDescription
-                            log(.error, "Upload failed: \(error.localizedDescription)")
+                        let uploadTargets = [written.dailyURL, written.monthURL, rawWritten.manifestURL] + rawWritten.sampleURLs
+                        for target in uploadTargets {
+                            let result = try await objectStoreUploader.putFile(target, relativeTo: storageStatus.rootURL, config: objectStoreConfig)
+                            log(.success, "Uploaded \(ymd) → s3://\(objectStoreConfig.bucket)/\(result.key)")
                         }
                     }
                 }
+
+                let commit = HealthSyncCommit(
+                    schemaVersion: "health.commit.v1",
+                    commitId: commitId,
+                    generatedAt: ISO8601.utcString(Date()),
+                    collector: CollectorPayload(collectorId: identity.collectorId, deviceId: identity.deviceId),
+                    dates: commitChanges.sorted { $0.date < $1.date }
+                )
+                let commitURL = try storage.writeCommit(commit, storage: storageStatus)
+                log(.success, "Wrote commit → \(commitURL.lastPathComponent)")
+
+                if let objectStoreConfig {
+                    let result = try await objectStoreUploader.putFile(commitURL, relativeTo: storageStatus.rootURL, config: objectStoreConfig)
+                    log(.success, "Uploaded commit → s3://\(objectStoreConfig.bucket)/\(result.key)")
+                }
+
+                try await anchorStore.saveState(syncPlan.proposedState)
+                await refreshAnchorDiagnostics()
+                let primedCount = syncPlan.proposedState.types.values.filter(\.isPrimed).count
+                log(.success, "Anchor state updated (\(primedCount) primed types).")
             } catch {
                 lastError = error.localizedDescription
                 log(.error, "Sync failed: \(error.localizedDescription)")
@@ -163,10 +278,104 @@ final class AppModel: ObservableObject {
 
             log(.info, "Sync finished.")
         }
+
+        return true
     }
 
     func clearLogs() {
         logs.removeAll()
+    }
+
+    func handleScenePhase(_ phase: ScenePhase) {
+        guard phase == .active else { return }
+        Task {
+            await refreshAuthStatus()
+            await refreshAnchorDiagnostics()
+        }
+    }
+
+    private func registerHealthObserverNotifications() {
+        healthObserverToken = NotificationCenter.default.addObserver(
+            forName: .nucleusHealthObserverDidFire,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self, let event = notification.object as? HealthObserverEvent else { return }
+            Task { @MainActor [weak self] in
+                self?.handleHealthObserverEvent(event)
+            }
+        }
+    }
+
+    private func handleHealthObserverEvent(_ event: HealthObserverEvent) {
+        guard event.errorMessage == nil else {
+            log(.error, "Health observer error (\(event.typeKey)): \(event.errorMessage!)")
+            event.complete()
+            return
+        }
+
+        pendingObserverEvents.append(event)
+        pendingObserverTypeKeys.insert(event.typeKey)
+        beginObserverBackgroundTaskIfNeeded()
+        log(.info, "Health observer fired for \(event.typeKey).")
+
+        if isSyncing {
+            log(.info, "Observer-triggered sync queued.")
+            return
+        }
+
+        let typeKeys = consumePendingObserverTypeKeys()
+        if !startSync(catchUpDays: catchUpDays, source: .observer(typeKeys)) {
+            completePendingObserverEvents()
+        }
+    }
+
+    private func finalizeSyncCycle() {
+        isSyncing = false
+        Task { await refreshAnchorDiagnostics() }
+
+        let followUpTypeKeys = consumePendingObserverTypeKeys()
+        guard !followUpTypeKeys.isEmpty else {
+            completePendingObserverEvents()
+            return
+        }
+
+        log(.info, "Running follow-up observer sync.")
+        if !startSync(catchUpDays: catchUpDays, source: .observer(followUpTypeKeys)) {
+            completePendingObserverEvents()
+        }
+    }
+
+    private func consumePendingObserverTypeKeys() -> [String] {
+        let typeKeys = pendingObserverTypeKeys.sorted()
+        pendingObserverTypeKeys.removeAll()
+        return typeKeys
+    }
+
+    private func completePendingObserverEvents() {
+        let events = pendingObserverEvents
+        pendingObserverEvents.removeAll()
+        for event in events {
+            event.complete()
+        }
+        endObserverBackgroundTaskIfNeeded()
+    }
+
+    private func beginObserverBackgroundTaskIfNeeded() {
+        guard observerBackgroundTaskID == .invalid else { return }
+        observerBackgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "nucleus.health.observer.sync") { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.log(.error, "Background HealthKit delivery expired before sync completed.")
+                self.completePendingObserverEvents()
+            }
+        }
+    }
+
+    private func endObserverBackgroundTaskIfNeeded() {
+        guard observerBackgroundTaskID != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(observerBackgroundTaskID)
+        observerBackgroundTaskID = .invalid
     }
 
     func setPreferICloud(_ value: Bool) {
@@ -299,6 +508,41 @@ struct LogLine: Identifiable, Equatable {
     let timestamp = Date()
     let level: Level
     let message: String
+}
+
+enum BackgroundDeliveryStatus: Equatable {
+    case idle
+    case needsAuthorization
+    case ready([String])
+    case error([String: String])
+
+    var label: String {
+        switch self {
+        case .idle:
+            "idle"
+        case .needsAuthorization:
+            "auth"
+        case .ready:
+            "ready"
+        case .error:
+            "error"
+        }
+    }
+}
+
+private enum SyncSource {
+    case manual
+    case observer([String])
+
+    func startMessage(windowDays: Int) -> String {
+        switch self {
+        case .manual:
+            return "Sync started (window: \(windowDays)d)…"
+        case .observer(let typeKeys):
+            let summary = typeKeys.isEmpty ? "observer" : typeKeys.joined(separator: ", ")
+            return "Background sync started (\(summary), window: \(windowDays)d)…"
+        }
+    }
 }
 
 struct ObjectStoreTestResult: Equatable {

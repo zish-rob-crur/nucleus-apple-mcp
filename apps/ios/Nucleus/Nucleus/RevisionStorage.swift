@@ -13,14 +13,14 @@ struct StorageStatus: Equatable {
 
 struct WrittenRevision: Equatable {
     let revisionId: String
-    let revisionURL: URL
-    let latestURL: URL
+    let dailyURL: URL
+    let monthURL: URL
 }
 
 struct WrittenRawSamples: Equatable {
     let revisionId: String
-    let rawURL: URL
-    let metaURL: URL
+    let manifestURL: URL
+    let sampleURLs: [URL]
 }
 
 enum RevisionStorageError: Error, LocalizedError {
@@ -53,42 +53,17 @@ final class RevisionStorage: @unchecked Sendable {
 
     func writeDailyRevision(
         _ revision: DailyRevision,
-        revisionId: String,
         storage: StorageStatus
     ) throws -> WrittenRevision {
-        guard let ymd = DateFormatting.ymdComponents(from: revision.date) else {
-            throw RevisionStorageError.invalidDate(revision.date)
-        }
+        let dailyURL = try url(forRelativePath: Self.dailyDateRelpath(for: revision.date), storage: storage, createParent: true)
+        try writeJSON(revision, to: dailyURL)
 
-        let dayDir = storage.rootURL
-            .appendingPathComponent("health", isDirectory: true)
-            .appendingPathComponent("v0", isDirectory: true)
-            .appendingPathComponent("data", isDirectory: true)
-            .appendingPathComponent(String(format: "%04d", ymd.year), isDirectory: true)
-            .appendingPathComponent(String(format: "%02d", ymd.month), isDirectory: true)
-            .appendingPathComponent(String(format: "%02d", ymd.day), isDirectory: true)
+        let monthURL = try url(forRelativePath: Self.dailyMonthRelpath(for: revision.date), storage: storage, createParent: true)
+        let month = String(revision.date.prefix(7))
+        let updatedMonth = try mergeMonthIndex(revision: revision, month: month, existingURL: monthURL)
+        try writeJSON(updatedMonth, to: monthURL)
 
-        let revisionsDir = dayDir.appendingPathComponent("revisions", isDirectory: true)
-        try fileManager.createDirectory(at: revisionsDir, withIntermediateDirectories: true, attributes: nil)
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        let data = try encoder.encode(revision)
-
-        let revisionURL = revisionsDir.appendingPathComponent("\(revisionId).json", isDirectory: false)
-        try data.write(to: revisionURL, options: [.atomic])
-
-        let latest = LatestPointer(
-            date: revision.date,
-            latestGeneratedAt: revision.generatedAt,
-            revisionId: revisionId,
-            revisionRelpath: "revisions/\(revisionId).json"
-        )
-        let latestData = try encoder.encode(latest)
-        let latestURL = dayDir.appendingPathComponent("latest.json", isDirectory: false)
-        try latestData.write(to: latestURL, options: [.atomic])
-
-        return WrittenRevision(revisionId: revisionId, revisionURL: revisionURL, latestURL: latestURL)
+        return WrittenRevision(revisionId: revision.commitId, dailyURL: dailyURL, monthURL: monthURL)
     }
 
     func writeRawSamples(
@@ -96,46 +71,149 @@ final class RevisionStorage: @unchecked Sendable {
         revisionId: String,
         storage: StorageStatus
     ) throws -> WrittenRawSamples {
-        guard let ymd = DateFormatting.ymdComponents(from: export.meta.date) else {
-            throw RevisionStorageError.invalidDate(export.meta.date)
+        let baseDir = try url(forRelativePath: Self.rawDateDirectoryRelpath(for: export.meta.date), storage: storage, createParent: true)
+        try fileManager.createDirectory(at: baseDir, withIntermediateDirectories: true, attributes: nil)
+
+        let typesDir = baseDir.appendingPathComponent("types", isDirectory: true)
+        if fileManager.fileExists(atPath: typesDir.path(percentEncoded: false)) {
+            try fileManager.removeItem(at: typesDir)
         }
-
-        let dayDir = storage.rootURL
-            .appendingPathComponent("health", isDirectory: true)
-            .appendingPathComponent("v1", isDirectory: true)
-            .appendingPathComponent("raw", isDirectory: true)
-            .appendingPathComponent("data", isDirectory: true)
-            .appendingPathComponent(String(format: "%04d", ymd.year), isDirectory: true)
-            .appendingPathComponent(String(format: "%02d", ymd.month), isDirectory: true)
-            .appendingPathComponent(String(format: "%02d", ymd.day), isDirectory: true)
-
-        let revisionsDir = dayDir.appendingPathComponent("revisions", isDirectory: true)
-        try fileManager.createDirectory(at: revisionsDir, withIntermediateDirectories: true, attributes: nil)
+        try fileManager.createDirectory(at: typesDir, withIntermediateDirectories: true, attributes: nil)
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
 
-        let rawURL = revisionsDir.appendingPathComponent("\(revisionId).jsonl", isDirectory: false)
-        let tmpURL = revisionsDir.appendingPathComponent(".tmp-\(revisionId)-\(UUID().uuidString).jsonl", isDirectory: false)
+        let grouped = Dictionary(grouping: export.samples, by: \.key)
+        var sampleURLs: [URL] = []
+        var manifestTypes: [String: RawTypeFile] = [:]
+
+        for key in export.meta.typeStatus.keys.sorted() {
+            let records = grouped[key] ?? []
+            let relpath: String?
+            if records.isEmpty {
+                relpath = nil
+            } else {
+                let typeURL = typesDir.appendingPathComponent("\(key).jsonl", isDirectory: false)
+                try writeJSONLines(records, encoder: encoder, to: typeURL)
+                sampleURLs.append(typeURL)
+                relpath = Self.rawTypeFileRelpath(for: export.meta.date, typeKey: key)
+            }
+
+            manifestTypes[key] = RawTypeFile(
+                status: export.meta.typeStatus[key] ?? .no_data,
+                recordCount: export.meta.typeCounts[key] ?? records.count,
+                relpath: relpath
+            )
+        }
+
+        let manifest = RawSamplesManifest(
+            schemaVersion: "health.raw.manifest.v1",
+            commitId: revisionId,
+            date: export.meta.date,
+            day: export.meta.day,
+            generatedAt: export.meta.generatedAt,
+            collector: export.meta.collector,
+            types: manifestTypes
+        )
+        let manifestURL = baseDir.appendingPathComponent("manifest.json", isDirectory: false)
+        try writeJSON(manifest, to: manifestURL)
+
+        return WrittenRawSamples(revisionId: revisionId, manifestURL: manifestURL, sampleURLs: sampleURLs.sorted { $0.path < $1.path })
+    }
+
+    func writeCommit(
+        _ commit: HealthSyncCommit,
+        storage: StorageStatus
+    ) throws -> URL {
+        let commitURL = try url(forRelativePath: Self.commitRelpath(for: commit.commitId), storage: storage, createParent: true)
+        try writeJSON(commit, to: commitURL)
+        return commitURL
+    }
+
+    static func rawManifestRelpath(for date: String) -> String {
+        "health/raw/dates/\(date)/manifest.json"
+    }
+
+    static func rawTypeFileRelpath(for date: String, typeKey: String) -> String {
+        "health/raw/dates/\(date)/types/\(typeKey).jsonl"
+    }
+
+    static func dailyDateRelpath(for date: String) -> String {
+        "health/daily/dates/\(date).json"
+    }
+
+    static func dailyMonthRelpath(for date: String) -> String {
+        let month = String(date.prefix(7))
+        return "health/daily/months/\(month).json"
+    }
+
+    static func rawDateDirectoryRelpath(for date: String) -> String {
+        "health/raw/dates/\(date)"
+    }
+
+    static func commitRelpath(for commitId: String) -> String {
+        let prefix = commitId.prefix(8)
+        let year = prefix.prefix(4)
+        let month = prefix.dropFirst(4).prefix(2)
+        let day = prefix.dropFirst(6).prefix(2)
+        return "health/commits/\(year)/\(month)/\(day)/\(commitId).json"
+    }
+
+    private func mergeMonthIndex(revision: DailyRevision, month: String, existingURL: URL) throws -> DailyMonthIndex {
+        let decoder = JSONDecoder()
+        var days: [DailyRevision] = []
+
+        if let data = try? Data(contentsOf: existingURL),
+           let existing = try? decoder.decode(DailyMonthIndex.self, from: data) {
+            days = existing.days.filter { $0.date != revision.date }
+        }
+
+        days.append(revision)
+        days.sort { $0.date < $1.date }
+
+        return DailyMonthIndex(
+            schemaVersion: "health.daily.month.v1",
+            month: month,
+            generatedAt: revision.generatedAt,
+            days: days
+        )
+    }
+
+    private func writeJSON<T: Encodable>(_ value: T, to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let data = try encoder.encode(value)
+        try data.write(to: url, options: [.atomic])
+    }
+
+    private func writeJSONLines<T: Encodable>(_ values: [T], encoder: JSONEncoder, to url: URL) throws {
+        let tmpURL = url.deletingLastPathComponent()
+            .appendingPathComponent(".tmp-\(UUID().uuidString)-\(url.lastPathComponent)", isDirectory: false)
 
         fileManager.createFile(atPath: tmpURL.path(percentEncoded: false), contents: nil, attributes: nil)
         let handle = try FileHandle(forWritingTo: tmpURL)
         defer { try? handle.close() }
 
         let newline = Data([0x0A])
-
-        for sample in export.samples {
-            try handle.write(contentsOf: encoder.encode(sample))
+        for value in values {
+            try handle.write(contentsOf: encoder.encode(value))
             try handle.write(contentsOf: newline)
         }
 
-        try fileManager.moveItem(at: tmpURL, to: rawURL)
+        if fileManager.fileExists(atPath: url.path(percentEncoded: false)) {
+            try fileManager.removeItem(at: url)
+        }
+        try fileManager.moveItem(at: tmpURL, to: url)
+    }
 
-        let metaURL = revisionsDir.appendingPathComponent("\(revisionId).meta.json", isDirectory: false)
-        let metaData = try encoder.encode(export.meta)
-        try metaData.write(to: metaURL, options: [.atomic])
-
-        return WrittenRawSamples(revisionId: revisionId, rawURL: rawURL, metaURL: metaURL)
+    private func url(forRelativePath relpath: String, storage: StorageStatus, createParent: Bool) throws -> URL {
+        let url = relpath.split(separator: "/").reduce(storage.rootURL) { partial, component in
+            partial.appendingPathComponent(String(component), isDirectory: false)
+        }
+        if createParent {
+            try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
+        }
+        return url
     }
 
     private func iCloudDocumentsURL() -> URL? {

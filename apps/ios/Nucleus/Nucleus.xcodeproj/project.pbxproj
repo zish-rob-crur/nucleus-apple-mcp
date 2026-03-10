@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		05FE240D937B40819CBB8DF4 /* HealthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB309D48470418CA924AD52 /* HealthModels.swift */; };
+		0F1A2B3C4D5E6F708192A3B4 /* HealthSyncState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A8B7C6D5E4F302918273645 /* HealthSyncState.swift */; };
 		6E0505A41CFE7F26C8ED8FC0 /* ObjectStoreSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22D9DDEDFE89F35160FAEA84 /* ObjectStoreSettingsView.swift */; };
 		6F3816971B214E1A6EB0B356 /* StorageSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9C72E633CA9EF1147A1A0E /* StorageSettingsView.swift */; };
 		996B8B3EC040CBFBE7ACAA79 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFDA905BB0E99126049DAA9F /* SettingsView.swift */; };
@@ -27,6 +28,7 @@
 /* Begin PBXFileReference section */
 		1DBC88197ADE90043D894FC5 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
 		0FB309D48470418CA924AD52 /* HealthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthModels.swift; sourceTree = "<group>"; };
+		9A8B7C6D5E4F302918273645 /* HealthSyncState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncState.swift; sourceTree = "<group>"; };
 		2046A2B79F7E4DE39FF10598 /* RevisionStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevisionStorage.swift; sourceTree = "<group>"; };
 		2C549216CC464C59ADEDEB9A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		2EB5EE6CDFA7F1A05C76D794 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
@@ -71,6 +73,7 @@
 				42712A422FD44961BD6C5C16 /* NucleusDesign.swift */,
 				8CBA841E2790456C9F889EC8 /* HealthCollector.swift */,
 				0FB309D48470418CA924AD52 /* HealthModels.swift */,
+				9A8B7C6D5E4F302918273645 /* HealthSyncState.swift */,
 				2046A2B79F7E4DE39FF10598 /* RevisionStorage.swift */,
 				E77A91C6C9E64FB7A20F636B /* Nucleus.entitlements */,
 				DB4B41CC425B4F4AA835BE69 /* Info.plist */,
@@ -178,6 +181,7 @@
 				C713E9B7BB8B4382893C1A00 /* NucleusDesign.swift in Sources */,
 				1938B0D92C754CB68435C8A9 /* HealthCollector.swift in Sources */,
 				05FE240D937B40819CBB8DF4 /* HealthModels.swift in Sources */,
+				0F1A2B3C4D5E6F708192A3B4 /* HealthSyncState.swift in Sources */,
 				7F0EA192A6D547F9A4D5C6C8 /* RevisionStorage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

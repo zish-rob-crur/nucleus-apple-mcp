@@ -14,6 +14,17 @@ enum MetricKey: String, CaseIterable, Identifiable {
     case standHours = "stand_hours"
     case restingHrAvg = "resting_hr_avg"
     case hrvSdnnAvg = "hrv_sdnn_avg"
+    case vo2Max = "vo2_max"
+    case oxygenSaturationPct = "oxygen_saturation_pct"
+    case respiratoryRateAvg = "respiratory_rate_avg"
+    case wristTemperatureCelsius = "wrist_temperature_celsius"
+    case bodyMassKg = "body_mass_kg"
+    case bodyFatPercentage = "body_fat_percentage"
+    case bloodPressureSystolicMmhg = "blood_pressure_systolic_mmhg"
+    case bloodPressureDiastolicMmhg = "blood_pressure_diastolic_mmhg"
+    case bloodGlucoseMgDl = "blood_glucose_mg_dl"
+    case bodyTemperatureCelsius = "body_temperature_celsius"
+    case basalBodyTemperatureCelsius = "basal_body_temperature_celsius"
     case sleepAsleepMinutes = "sleep_asleep_minutes"
     case sleepInBedMinutes = "sleep_in_bed_minutes"
 
@@ -27,6 +38,17 @@ enum MetricKey: String, CaseIterable, Identifiable {
         case .standHours: "Stand"
         case .restingHrAvg: "Resting HR"
         case .hrvSdnnAvg: "HRV (SDNN)"
+        case .vo2Max: "VO₂ Max"
+        case .oxygenSaturationPct: "SpO₂"
+        case .respiratoryRateAvg: "Respiratory"
+        case .wristTemperatureCelsius: "Wrist Temp"
+        case .bodyMassKg: "Weight"
+        case .bodyFatPercentage: "Body Fat"
+        case .bloodPressureSystolicMmhg: "BP Systolic"
+        case .bloodPressureDiastolicMmhg: "BP Diastolic"
+        case .bloodGlucoseMgDl: "Blood Glucose"
+        case .bodyTemperatureCelsius: "Body Temp"
+        case .basalBodyTemperatureCelsius: "Basal Temp"
         case .sleepAsleepMinutes: "Sleep (Asleep)"
         case .sleepInBedMinutes: "Sleep (In Bed)"
         }
@@ -40,6 +62,17 @@ enum MetricKey: String, CaseIterable, Identifiable {
         case .standHours: "hr"
         case .restingHrAvg: "bpm"
         case .hrvSdnnAvg: "ms"
+        case .vo2Max: "mL/kg/min"
+        case .oxygenSaturationPct: "%"
+        case .respiratoryRateAvg: "brpm"
+        case .wristTemperatureCelsius: "°C"
+        case .bodyMassKg: "kg"
+        case .bodyFatPercentage: "%"
+        case .bloodPressureSystolicMmhg: "mmHg"
+        case .bloodPressureDiastolicMmhg: "mmHg"
+        case .bloodGlucoseMgDl: "mg/dL"
+        case .bodyTemperatureCelsius: "°C"
+        case .basalBodyTemperatureCelsius: "°C"
         case .sleepAsleepMinutes: "min"
         case .sleepInBedMinutes: "min"
         }
@@ -53,6 +86,17 @@ enum MetricKey: String, CaseIterable, Identifiable {
         case .standHours: "figure.stand"
         case .restingHrAvg: "heart.fill"
         case .hrvSdnnAvg: "waveform.path.ecg"
+        case .vo2Max: "lungs.fill"
+        case .oxygenSaturationPct: "drop.fill"
+        case .respiratoryRateAvg: "wind"
+        case .wristTemperatureCelsius: "thermometer.medium"
+        case .bodyMassKg: "scalemass.fill"
+        case .bodyFatPercentage: "figure.arms.open"
+        case .bloodPressureSystolicMmhg: "waveform.path"
+        case .bloodPressureDiastolicMmhg: "waveform.path"
+        case .bloodGlucoseMgDl: "drop.triangle.fill"
+        case .bodyTemperatureCelsius: "thermometer.high"
+        case .basalBodyTemperatureCelsius: "thermometer.low"
         case .sleepAsleepMinutes: "moon.zzz"
         case .sleepInBedMinutes: "bed.double.fill"
         }
@@ -83,6 +127,7 @@ struct CollectorPayload: Codable {
 
 struct DailyRevision: Codable {
     let schemaVersion: String
+    let commitId: String
     let date: String
     let day: DayPayload
     let generatedAt: String
@@ -90,9 +135,11 @@ struct DailyRevision: Codable {
     let metrics: [String: Double?]
     let metricStatus: [String: MetricStatus]
     let metricUnits: [String: String]
+    let rawManifestRelpath: String
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
+        case commitId = "commit_id"
         case date
         case day
         case generatedAt = "generated_at"
@@ -100,20 +147,21 @@ struct DailyRevision: Codable {
         case metrics
         case metricStatus = "metric_status"
         case metricUnits = "metric_units"
+        case rawManifestRelpath = "raw_manifest_relpath"
     }
 }
 
-struct LatestPointer: Codable {
-    let date: String
-    let latestGeneratedAt: String
-    let revisionId: String
-    let revisionRelpath: String
+struct DailyMonthIndex: Codable {
+    let schemaVersion: String
+    let month: String
+    let generatedAt: String
+    let days: [DailyRevision]
 
     enum CodingKeys: String, CodingKey {
-        case date
-        case latestGeneratedAt = "latest_generated_at"
-        case revisionId = "revision_id"
-        case revisionRelpath = "revision_relpath"
+        case schemaVersion = "schema_version"
+        case month
+        case generatedAt = "generated_at"
+        case days
     }
 }
 
@@ -174,6 +222,19 @@ enum DateFormatting {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
+    static func date(from ymd: String, in timeZone: TimeZone) -> Date? {
+        guard let components = ymdComponents(from: ymd) else { return nil }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.date(from: DateComponents(
+            timeZone: timeZone,
+            year: components.year,
+            month: components.month,
+            day: components.day
+        ))
+    }
+
     static func ymdComponents(from ymd: String) -> (year: Int, month: Int, day: Int)? {
         let parts = ymd.split(separator: "-")
         guard parts.count == 3,
@@ -184,17 +245,27 @@ enum DateFormatting {
         }
         return (y, m, d)
     }
+
+    static func recentYMDStrings(endingAt now: Date, days: Int, timeZone: TimeZone) -> [String] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let today = calendar.startOfDay(for: now)
+
+        return (0..<max(1, days)).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
+            return ymdString(from: date, in: timeZone)
+        }
+    }
 }
 
 enum RawSampleKind: String, Encodable {
     case quantity
     case category
     case workout
+    case correlation
 }
 
 struct RawSamplesMeta: Encodable {
-    let record: String = "meta"
-    let schemaVersion: String = "health.raw.v1"
     let date: String
     let day: DayPayload
     let generatedAt: String
@@ -203,8 +274,6 @@ struct RawSamplesMeta: Encodable {
     let typeCounts: [String: Int]
 
     enum CodingKeys: String, CodingKey {
-        case record
-        case schemaVersion = "schema_version"
         case date
         case day
         case generatedAt = "generated_at"
@@ -233,6 +302,8 @@ struct RawSampleRecord: Encodable {
     let durationSec: Double?
     let totalEnergyKcal: Double?
     let totalDistanceM: Double?
+    let components: [String: Double]?
+    let componentUnits: [String: String]?
 
     let sourceBundleId: String?
     let sourceName: String?
@@ -256,6 +327,8 @@ struct RawSampleRecord: Encodable {
         case durationSec = "duration_sec"
         case totalEnergyKcal = "total_energy_kcal"
         case totalDistanceM = "total_distance_m"
+        case components
+        case componentUnits = "component_units"
         case sourceBundleId = "source_bundle_id"
         case sourceName = "source_name"
         case deviceModel = "device_model"
@@ -267,4 +340,68 @@ struct RawSampleRecord: Encodable {
 struct RawSamplesExport {
     let meta: RawSamplesMeta
     let samples: [RawSampleRecord]
+}
+
+struct RawTypeFile: Codable {
+    let status: MetricStatus
+    let recordCount: Int
+    let relpath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case recordCount = "record_count"
+        case relpath
+    }
+}
+
+struct RawSamplesManifest: Codable {
+    let schemaVersion: String
+    let commitId: String
+    let date: String
+    let day: DayPayload
+    let generatedAt: String
+    let collector: CollectorPayload
+    let types: [String: RawTypeFile]
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case commitId = "commit_id"
+        case date
+        case day
+        case generatedAt = "generated_at"
+        case collector
+        case types
+    }
+}
+
+struct HealthCommitDateChange: Codable {
+    let date: String
+    let dailyRelpath: String
+    let monthRelpath: String
+    let rawManifestRelpath: String
+    let rawTypeKeys: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case date
+        case dailyRelpath = "daily_relpath"
+        case monthRelpath = "month_relpath"
+        case rawManifestRelpath = "raw_manifest_relpath"
+        case rawTypeKeys = "raw_type_keys"
+    }
+}
+
+struct HealthSyncCommit: Codable {
+    let schemaVersion: String
+    let commitId: String
+    let generatedAt: String
+    let collector: CollectorPayload
+    let dates: [HealthCommitDateChange]
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case commitId = "commit_id"
+        case generatedAt = "generated_at"
+        case collector
+        case dates
+    }
 }

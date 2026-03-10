@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from .tools.calendar import calendar_router
+from .tools.health import health_router
 from .tools.notes import notes_router
 from .tools.reminders import reminders_router
 
@@ -14,6 +15,7 @@ def create_app() -> FastMCP:
     )
 
     app.mount(calendar_router)
+    app.mount(health_router)
     app.mount(notes_router)
     app.mount(reminders_router)
     return app

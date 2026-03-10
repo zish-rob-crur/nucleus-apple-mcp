@@ -39,6 +39,13 @@ private extension DiagnosticsView {
                     NucleusInlineStat(title: "Logs", value: "\(model.logs.count)")
                     NucleusInlineStat(title: "S3", value: model.objectStoreSettings.enabled ? "enabled" : "off")
                     NucleusInlineStat(title: "Auth", value: authShortLabel)
+                    NucleusInlineStat(title: "Sync", value: model.anchorDiagnostics.modeLabel)
+                }
+
+                HStack(spacing: 10) {
+                    NucleusInlineStat(title: "Anchors", value: model.anchorDiagnostics.typeCoverageLabel)
+                    NucleusInlineStat(title: "Tracked", value: "\(model.anchorDiagnostics.trackedSampleCount)")
+                    NucleusInlineStat(title: "Delivery", value: model.backgroundDeliveryStatus.label)
                 }
 
                 if let error = model.lastError {

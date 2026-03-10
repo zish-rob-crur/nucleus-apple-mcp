@@ -1,335 +1,115 @@
-# Health Module Spec (v0.1)
+# Health Module Spec
 
-This document defines the playbook for the Health module: scope, sync architecture, file schema, MCP tools, and error conventions.
+This document defines the current storage and query model for the Health module.
 
-v0.1 tightens the v0 design for correctness under real-world constraints:
+The old `health/v0/...revisions/latest.json` design is removed. The project is still in development, so the storage model optimizes for:
 
-- iOS background execution is **best-effort**; uploads can be delayed. ([Apple Developer][6])
-- Network retries and concurrent runs can cause **write races**; older uploads must never overwrite newer data.
-- “A day” must be unambiguous across timezones/DST; day boundaries must be explicit.
-- Missing/unauthorized data must be explicit; never encode “no data” as `0`.
+- fast MCP reads
+- explicit incremental polling
+- simple object-store layout
+- low ambiguity around "what changed"
 
----
+## 1. Scope
 
-## 1. Scope & Constraints
+- Collector runtime: iOS app (`Nucleus`)
+- Source of truth: files written by the iOS app into app Documents, optionally uploaded to an S3-compatible object store
+- MCP reads those files directly from iCloud Drive or S3-compatible object storage
+- No compatibility guarantee with earlier health export layouts
 
-- Module name: **health**
-- Data collection runtime: **iOS companion app (Nucleus) only** (no direct macOS HealthKit collection in v0.x).
-- v0.x is **read-only for downstream agents** (no write-back to HealthKit).
-- v0.x uploads **aggregated metrics only** (daily buckets).
-- v1 optionally uploads **raw samples** (JSONL) for agent-grade analysis and feature derivation.
-- Supports two storage backends:
-  - `icloud_drive` (Documents folder under the app’s iCloud ubiquity container)
-  - `s3_object_store`
-- Sync mode: **File-based synchronization** (Daily + incremental updates).
-- Consistency model: **eventual consistency** (files appear when uploaded).
+## 2. Design Goals
 
-Out of scope in v0.x:
+- Single-day reads should require one object read.
+- Range reads should use month-level indexes rather than scanning every date path.
+- Incremental MCP polling should use a stable cursor.
+- Raw sample export should be queryable without rebuilding a full-day aggregate on the server.
 
-- ECG/clinical records
-- raw-sample export APIs (v1 introduces raw JSONL exports; v0.x remains aggregates-only)
-- server-side databases/indexing services (v0.x is “direct file read”)
-- complex on-demand triggers (push notifications)
+## 2.1 Local Collector State
 
----
+The iOS collector also keeps a local-only anchor store in app private storage.
 
-## 2. Terminology
+- It is not uploaded to iCloud Drive.
+- It is not uploaded to S3-compatible object storage.
+- It stores HealthKit anchor cursors and a UUID → date index used to resolve deletions.
 
-- **Collector**: iOS app (Nucleus) component that reads HealthKit and uploads health daily data files.
-- **Storage**: iCloud Drive (Documents) or S3 bucket/prefix where files are deposited.
-- **Day**: a reporting day with explicit timezone and `[start, end)` boundaries.
-- **Revision**: an immutable file representing one generated snapshot for a specific day.
-- **Latest Pointer**: a small file indicating the best-known latest revision for a day.
+This local state is an implementation detail of the collector. MCP only reads exported health artifacts under `health/`.
 
----
+## 2.2 Observer Delivery
 
-## 3. Platform Facts This Spec Assumes
+For sample-based HealthKit types, the iOS collector also registers `HKObserverQuery` handlers at app launch and enables immediate background delivery after authorization is granted.
 
-- HealthKit authorization is fine-grained; apps must request read permissions per type. ([Apple Developer][4])
-- Background delivery uses observer queries / background delivery and is best-effort. ([Apple Developer][5])
-- Background task scheduling is best-effort; do not assume exact timing or frequency. ([Apple Developer][6])
-- S3 has strong read-after-write consistency for PUT/GET/LIST. ([AWS][7])
+- Observer wakeups feed the same local anchor store used by manual sync.
+- The app replays incremental export from the anchor cursor and only rewrites affected dates.
+- Daily aggregate metrics such as activity summary are still recomputed per affected date; they are not delivered as a standalone observer stream.
+- Background delivery is best-effort. It should be treated as an automatic sync trigger, not as a durability boundary; the durable cursor remains the exported `commit_id`.
 
----
+## 3. Storage Layout
 
-## 4. Architecture
+All health artifacts live under:
 
-### 4.1 High-Level Flow
+`health/`
 
-1. iOS Collector reads HealthKit (daily statistics queries).
-2. Collector constructs a **Daily Revision** JSON payload for the reporting day.
-3. Collector uploads an immutable revision file under that day’s directory (append-only).
-4. (Optional) Collector updates that day’s `latest.json` pointer.
-5. MCP tools read these files directly to answer queries.
+### 3.1 Daily Snapshot
 
-### 4.2 Write Model (Normative): Append-Only Revisions
+Latest snapshot for one calendar day:
 
-To prevent write races from corrupting “latest” data, **do not overwrite daily data files**.
+`health/daily/dates/{YYYY-MM-DD}.json`
 
-- Each update produces a new revision file under `.../{YYYY}/{MM}/{DD}/revisions/`.
-- Revision file names must sort chronologically (lexicographic order) and be globally unique.
-- The collector may update `latest.json` as an optimization, but MCP must tolerate it being missing or stale.
+This is the primary MCP read path for `health.read_daily_metrics`.
 
-### 4.3 Sync Triggers (Best-Effort)
+### 3.2 Monthly Index
 
-- **Primary Trigger (HealthKit Updates)**:
-  - Register `HKObserverQuery` for tracked types. ([Apple Developer][5])
-  - On notification (Background Delivery), recompute “today” and upload a new revision.
-- **Secondary Trigger (Scheduled)**:
-  - Use `BGAppRefreshTask` to run periodically (e.g., nightly). ([Apple Developer][6])
-  - Recompute and upload revisions for a **catch-up window** (default: last 7 days) to absorb late-arriving data (sleep, HRV, etc.).
+Month-level materialized view:
 
----
+`health/daily/months/{YYYY-MM}.json`
 
-## 5. Storage Layout (Normative)
+This file contains the latest daily snapshots for every exported day in that month.
 
-### 5.1 Base Prefix
+This is the primary MCP read path for `health.read_range_metrics`.
 
-All objects live under:
+### 3.3 Raw Samples
 
-`health/v0/`
+Per-day raw export root:
 
-### 5.2 Day Directory
-
-`health/v0/data/{YYYY}/{MM}/{DD}/`
+`health/raw/dates/{YYYY-MM-DD}/`
 
 Contents:
 
-- `revisions/{REVISION_ID}.json` (immutable; 1+ files)
-- `latest.json` (optional; pointer to the best-known latest revision)
+- `manifest.json`
+- `types/{TYPE_KEY}.jsonl`
 
-### 5.3 Revision ID Format (Normative)
+`manifest.json` describes which per-type files exist, their record counts, and status.
 
-`REVISION_ID` must be:
+### 3.4 Commit Log
 
-- UTC timestamp formatted as `YYYYMMDDTHHMMSSZ`
-- followed by `-` and a random suffix (6+ base16 chars)
+Each sync run produces one commit file:
 
-Example:
+`health/commits/{YYYY}/{MM}/{DD}/{COMMIT_ID}.json`
 
-- `20260208T100000Z-7F3A2C`
+`COMMIT_ID` is the sync cursor. It is globally unique and lexicographically sortable.
 
-### 5.4 latest.json Format (Optional)
+MCP incremental polling is based on this path family.
 
-```json
-{
-  "date": "2026-02-08",
-  "latest_generated_at": "2026-02-08T10:00:00Z",
-  "revision_id": "20260208T100000Z-7F3A2C",
-  "revision_relpath": "revisions/20260208T100000Z-7F3A2C.json"
-}
-```
+## 4. Commit ID
 
-Semantics:
+`COMMIT_ID` must be:
 
-- `revision_relpath` is relative to `health/v0/data/{YYYY}/{MM}/{DD}/`.
-- MCP must verify the referenced revision exists and is parseable; otherwise it must fall back to scanning `revisions/`.
-
-### 5.5 Object Store Mapping (s3_object_store)
-
-When using the `s3_object_store` backend, the Collector uploads the same files it writes locally, using an object key that preserves the relative path under the local root:
-
-- Local root: `.../Documents/`
-- Object key: `{prefix(optional)}/{relative_path_from_documents}`
+- UTC timestamp in `YYYYMMDDTHHMMSSZ`
+- followed by `-`
+- followed by a random hex suffix
 
 Example:
 
-- Local: `Documents/health/v0/data/2026/02/21/revisions/20260221T115720Z-FF283A.json`
-- Object key: `health/v0/data/2026/02/21/revisions/20260221T115720Z-FF283A.json`
+`20260308T091230Z-A1B2C3`
 
-Notes:
+## 5. Schemas
 
-- S3-compatible stores are acceptable as long as they support SigV4 (e.g. Cloudflare R2).
-- For Cloudflare R2, the S3 “region” is typically `auto` and a custom endpoint is required.
-- Do not hardcode long-lived access keys in the app; prefer Keychain for local-only dev and use short-lived credentials or pre-signed URLs for production.
+### 5.1 Daily Snapshot
 
----
+Path:
 
-## 6. Daily Revision File Schema (v0)
+`health/daily/dates/{YYYY-MM-DD}.json`
 
-### 6.1 File Path
-
-`health/v0/data/{YYYY}/{MM}/{DD}/revisions/{REVISION_ID}.json`
-
-### 6.2 JSON Content
-
-```json
-{
-  "schema_version": "health.v0",
-  "date": "2026-02-08",
-  "day": {
-    "timezone": "America/Los_Angeles",
-    "start": "2026-02-08T00:00:00-08:00",
-    "end": "2026-02-09T00:00:00-08:00"
-  },
-  "generated_at": "2026-02-08T10:00:00Z",
-  "collector": {
-    "collector_id": "4E0A0B4E-2E08-4B63-9B50-8E3F6F8A1F1F",
-    "device_id": "A1B2C3D4-E5F6-7890-ABCD-EF0123456789"
-  },
-  "metrics": {
-    "steps": 1250,
-    "active_energy_kcal": 450.5,
-    "exercise_minutes": 30,
-    "stand_hours": 4,
-    "resting_hr_avg": null,
-    "hrv_sdnn_avg": null,
-    "sleep_asleep_minutes": null,
-    "sleep_in_bed_minutes": null
-  },
-  "metric_status": {
-    "steps": "ok",
-    "active_energy_kcal": "ok",
-    "exercise_minutes": "ok",
-    "stand_hours": "ok",
-    "resting_hr_avg": "no_data",
-    "hrv_sdnn_avg": "unauthorized",
-    "sleep_asleep_minutes": "no_data",
-    "sleep_in_bed_minutes": "no_data"
-  },
-  "metric_units": {
-    "steps": "count",
-    "active_energy_kcal": "kcal",
-    "exercise_minutes": "min",
-    "stand_hours": "hr",
-    "resting_hr_avg": "bpm",
-    "hrv_sdnn_avg": "ms",
-    "sleep_asleep_minutes": "min",
-    "sleep_in_bed_minutes": "min"
-  }
-}
-```
-
-Rules:
-
-- `generated_at` MUST be an ISO-8601 datetime in UTC (suffix `Z`).
-- `day.start`/`day.end` MUST be ISO-8601 with explicit timezone offset; interval is `[start, end)`.
-- `metrics` values are numbers or `null` (never use `0` to mean “no data”).
-- For a metric key `k`:
-  - if `metric_status[k] == "ok"`, then `metrics[k]` MUST be a number
-  - if `metric_status[k] != "ok"`, then `metrics[k]` MUST be `null`
-
-### 6.3 metric_status Enum
-
-- `ok`: data computed and present
-- `no_data`: authorized but HealthKit had no data for that interval
-- `unauthorized`: collector did not have permission to read that metric
-- `unsupported`: metric not supported on this device/OS configuration
-
----
-
-## 6.4 Raw Samples Export (v1, JSONL) (Optional)
-
-v1 adds an optional raw export stream intended for “agent-grade” analysis. It is complementary to the v0 daily aggregates:
-
-- v0 answers “what happened today?” quickly and stably.
-- v1 enables downstream recomputation: feature engineering, anomaly detection, and richer longitudinal analysis.
-
-### 6.4.1 File Path
-
-Samples:
-
-`health/v1/raw/data/{YYYY}/{MM}/{DD}/revisions/{REVISION_ID}.jsonl`
-
-Meta:
-
-`health/v1/raw/data/{YYYY}/{MM}/{DD}/revisions/{REVISION_ID}.meta.json`
-
-### 6.4.2 Format (JSON Lines)
-
-- The samples file MUST be UTF-8 text in JSONL (one JSON object per line).
-- Each line in the samples file is a **sample record** (`record = "sample"`).
-- The meta file is a single JSON object (not JSONL) describing the revision.
-
-### 6.4.3 Meta File (`*.meta.json`)
-
-```json
-{
-  "record": "meta",
-  "schema_version": "health.raw.v1",
-  "date": "2026-02-21",
-  "day": { "timezone": "Asia/Shanghai", "start": "2026-02-21T00:00:00+08:00", "end": "2026-02-22T00:00:00+08:00" },
-  "generated_at": "2026-02-21T11:57:20Z",
-  "collector": { "collector_id": "...", "device_id": "..." },
-  "type_status": { "heart_rate": "ok", "sleep_analysis": "unauthorized" },
-  "type_counts": { "heart_rate": 2450, "sleep_analysis": 0 }
-}
-```
-
-Rules:
-
-- `type_status[k]` MUST be one of: `ok | no_data | unauthorized | unsupported`.
-- If `type_status[k] != "ok"`, then `type_counts[k]` MUST be `0`.
-
-### 6.4.4 Sample Records (JSONL Lines)
-
-Each sample record represents a single HealthKit sample (quantity/category/workout).
-
-Quantity sample example:
-
-```json
-{
-  "record": "sample",
-  "kind": "quantity",
-  "key": "heart_rate",
-  "hk_identifier": "HKQuantityTypeIdentifierHeartRate",
-  "uuid": "…",
-  "start": "2026-02-21T10:12:00+08:00",
-  "end": "2026-02-21T10:12:00+08:00",
-  "value": 72.0,
-  "unit": "bpm",
-  "source_bundle_id": "com.apple.health",
-  "source_name": "Health",
-  "device_model": "iPhone",
-  "device_manufacturer": "Apple",
-  "was_user_entered": false
-}
-```
-
-Sleep category sample example:
-
-```json
-{
-  "record": "sample",
-  "kind": "category",
-  "key": "sleep_analysis",
-  "hk_identifier": "HKCategoryTypeIdentifierSleepAnalysis",
-  "uuid": "…",
-  "start": "2026-02-21T00:30:00+08:00",
-  "end": "2026-02-21T07:10:00+08:00",
-  "category_value": 0,
-  "category_label": "in_bed",
-  "source_bundle_id": "com.apple.health",
-  "source_name": "Health"
-}
-```
-
-Workout sample example:
-
-```json
-{
-  "record": "sample",
-  "kind": "workout",
-  "key": "workout",
-  "uuid": "…",
-  "start": "2026-02-21T18:10:00+08:00",
-  "end": "2026-02-21T18:55:00+08:00",
-  "workout_activity_type": 37,
-  "duration_sec": 2700,
-  "total_energy_kcal": 420.5,
-  "total_distance_m": 5100
-}
-```
-
-Notes:
-
-- `start`/`end` MUST be ISO-8601 with an explicit timezone offset.
-- Canonical units: `count | kcal | bpm | ms | m | sec`.
-- Raw export is append-only and uses the same `REVISION_ID` format as v0.
-
----
-
-## 7. Metric Keys (v0)
+Current metric keys may include:
 
 - `steps`
 - `active_energy_kcal`
@@ -337,141 +117,309 @@ Notes:
 - `stand_hours`
 - `resting_hr_avg`
 - `hrv_sdnn_avg`
+- `vo2_max`
+- `oxygen_saturation_pct`
+- `respiratory_rate_avg`
+- `wrist_temperature_celsius`
+- `body_mass_kg`
+- `body_fat_percentage`
+- `blood_pressure_systolic_mmhg`
+- `blood_pressure_diastolic_mmhg`
+- `blood_glucose_mg_dl`
+- `body_temperature_celsius`
+- `basal_body_temperature_celsius`
 - `sleep_asleep_minutes`
 - `sleep_in_bed_minutes`
 
----
+Example:
 
-## 8. iOS Collector Behavior (Normative)
+```json
+{
+  "schema_version": "health.daily.v1",
+  "commit_id": "20260308T091230Z-A1B2C3",
+  "date": "2026-03-08",
+  "day": {
+    "timezone": "Asia/Shanghai",
+    "start": "2026-03-08T00:00:00+08:00",
+    "end": "2026-03-09T00:00:00+08:00"
+  },
+  "generated_at": "2026-03-08T09:12:30Z",
+  "collector": {
+    "collector_id": "COLLECTOR_UUID",
+    "device_id": "DEVICE_UUID"
+  },
+  "metrics": {
+    "steps": 1250,
+    "active_energy_kcal": 450.5
+  },
+  "metric_status": {
+    "steps": "ok",
+    "active_energy_kcal": "ok"
+  },
+  "metric_units": {
+    "steps": "count",
+    "active_energy_kcal": "kcal"
+  },
+  "raw_manifest_relpath": "health/raw/dates/2026-03-08/manifest.json"
+}
+```
 
-### 8.1 Collector Identity
+### 5.2 Monthly Index
 
-- `collector_id` MUST be stable across launches and ideally across reinstalls (e.g., UUID stored in Keychain).
-- `device_id` SHOULD be a stable UUID chosen by the app; avoid using transient identifiers.
+Path:
 
-### 8.2 What Gets Recomputed
+`health/daily/months/{YYYY-MM}.json`
 
-On each run (foreground launch, observer wake, or scheduled task):
+Example:
 
-- Always recompute **today**.
-- Recompute a **catch-up window** of past days (default: last 7 days) to handle late-arriving or corrected data.
+```json
+{
+  "schema_version": "health.daily.month.v1",
+  "month": "2026-03",
+  "generated_at": "2026-03-08T09:12:30Z",
+  "days": [
+    {
+      "schema_version": "health.daily.v1",
+      "commit_id": "20260308T091230Z-A1B2C3",
+      "date": "2026-03-08",
+      "...": "same shape as daily snapshot"
+    }
+  ]
+}
+```
 
-### 8.3 Upload Procedure (Per Day)
+### 5.3 Raw Manifest
 
-1. Compute the day boundaries (`day.timezone`, `day.start`, `day.end`) and aggregated metrics for that interval.
-2. Generate a new `REVISION_ID` using the current UTC time and a random suffix.
-3. Write JSON to a local temp file, then upload/move into `revisions/{REVISION_ID}.json` (immutable).
-4. Optionally update `latest.json` to point to the new revision.
+Path:
 
-The collector MAY skip writing a new revision if the computed payload is byte-for-byte identical to the current latest revision.
+`health/raw/dates/{YYYY-MM-DD}/manifest.json`
 
----
+Current raw type keys may include:
 
-## 9. MCP Read Behavior (Normative)
+- `step_count`
+- `active_energy_burned`
+- `heart_rate`
+- `resting_heart_rate`
+- `hrv_sdnn`
+- `vo2_max`
+- `oxygen_saturation`
+- `respiratory_rate`
+- `apple_sleeping_wrist_temperature`
+- `body_mass`
+- `body_fat_percentage`
+- `blood_pressure`
+- `blood_glucose`
+- `body_temperature`
+- `basal_body_temperature`
+- `sleep_analysis`
+- `workout`
 
-### 9.1 Resolving “Latest” for a Day
+Example:
 
-Given a `date`:
+```json
+{
+  "schema_version": "health.raw.manifest.v1",
+  "commit_id": "20260308T091230Z-A1B2C3",
+  "date": "2026-03-08",
+  "day": {
+    "timezone": "Asia/Shanghai",
+    "start": "2026-03-08T00:00:00+08:00",
+    "end": "2026-03-09T00:00:00+08:00"
+  },
+  "generated_at": "2026-03-08T09:12:30Z",
+  "collector": {
+    "collector_id": "COLLECTOR_UUID",
+    "device_id": "DEVICE_UUID"
+  },
+  "types": {
+    "heart_rate": {
+      "status": "ok",
+      "record_count": 842,
+      "relpath": "health/raw/dates/2026-03-08/types/heart_rate.jsonl"
+    },
+    "blood_pressure": {
+      "status": "ok",
+      "record_count": 2,
+      "relpath": "health/raw/dates/2026-03-08/types/blood_pressure.jsonl"
+    },
+    "sleep_analysis": {
+      "status": "unauthorized",
+      "record_count": 0,
+      "relpath": null
+    }
+  }
+}
+```
 
-1. Try to read `health/v0/data/YYYY/MM/DD/latest.json`.
-2. If present, attempt to read the referenced revision file.
-3. If `latest.json` is missing, stale, or invalid, list `health/v0/data/YYYY/MM/DD/revisions/` and choose the lexicographically greatest `REVISION_ID`.
+### 5.4 Commit File
 
-### 9.2 Range Reads
+Path:
 
-Range reads MUST be date-driven (by calendar date), not by listing arbitrary prefixes:
+`health/commits/{YYYY}/{MM}/{DD}/{COMMIT_ID}.json`
 
-- For each date in `[start_date, end_date]` (inclusive), attempt to resolve latest and read one revision.
-- Missing dates are reported in `missing_dates` and do not cause the tool to fail.
+Example:
 
----
+```json
+{
+  "schema_version": "health.commit.v1",
+  "commit_id": "20260308T091230Z-A1B2C3",
+  "generated_at": "2026-03-08T09:12:30Z",
+  "collector": {
+    "collector_id": "COLLECTOR_UUID",
+    "device_id": "DEVICE_UUID"
+  },
+  "dates": [
+    {
+      "date": "2026-03-08",
+      "daily_relpath": "health/daily/dates/2026-03-08.json",
+      "month_relpath": "health/daily/months/2026-03.json",
+      "raw_manifest_relpath": "health/raw/dates/2026-03-08/manifest.json",
+      "raw_type_keys": ["heart_rate", "sleep_analysis", "step_count"]
+    }
+  ]
+}
+```
 
-## 10. Error Codes (v0.x)
+## 6. Collector Write Model
 
-- `INVALID_ARGUMENTS`: invalid params / parse failure (bad date format, `start_date > end_date`, range too large).
-- `NOT_AUTHORIZED`: MCP lacks permission/credentials to read the configured storage.
-- `DATA_NOT_FOUND`: no data exists for the requested date (no revisions found).
-- `STORAGE_UNAVAILABLE`: storage backend temporarily unavailable (network, API errors).
-- `INTERNAL`: unexpected exception (serialization, bug).
+For each sync run:
 
----
+1. Generate one `COMMIT_ID`.
+2. Recompute the requested catch-up window locally.
+3. Rewrite the affected day snapshots under `health/daily/dates/`.
+4. Rewrite the affected month indexes under `health/daily/months/`.
+5. Rewrite the affected raw manifest and per-type raw JSONL files under `health/raw/dates/`.
+6. Write one commit file under `health/commits/`.
 
-## 11. MCP Tool Mapping (Python / FastMCP)
+This is a current-state materialized-view model, not an append-only historical archive.
 
-Required tools:
+## 7. MCP Read Model
 
+### 7.1 Single Day
+
+`health.read_daily_metrics(date)`
+
+- read `health/daily/dates/{date}.json`
+
+### 7.2 Date Range
+
+`health.read_range_metrics(start_date, end_date)`
+
+- read the minimal set of monthly indexes that cover the requested range
+- filter in-memory by date
+- report missing dates explicitly
+
+### 7.3 Sample Catalog
+
+`health.list_sample_catalog()`
+
+- return known raw `type_key` values
+- return `kind` and logical `tags` for each type
+- return how each raw type maps to exported daily metrics
+
+### 7.4 Raw Samples
+
+`health.read_samples(start_date, end_date?, type_keys?, tags?, kinds?, cursor?, max_records?, manifest_only?)`
+
+- read `health/raw/dates/{date}/manifest.json` across the requested date range
+- filter by canonical `type_key`, logical `tags`, and/or `kind`
+- paginate fairly across date/type boundaries with an opaque cursor
+- allow manifest-only reads without forcing sample payloads
+
+### 7.5 Daily Raw Wrapper
+
+`health.read_daily_raw(date, ...)`
+
+- compatibility wrapper around `health.read_samples(...)` for a single date
+
+### 7.6 Day Inspection
+
+`health.inspect_day(date, metric_keys?, type_keys?)`
+
+- combine the daily snapshot with the raw manifest
+- explain why a daily metric is `ok`, `no_data`, `unauthorized`, or structurally disconnected from raw samples
+
+### 7.7 Incremental Polling
+
+`health.list_changes(since_cursor, include_raw_types=true)`
+
+- list commit files under `health/commits/`
+- return commits whose `commit_id` is lexicographically greater than `since_cursor`
+- optionally enrich each changed date with raw type `status`, `record_count`, and `relpath`
+
+## 8. MCP Tool Set
+
+Required:
+
+- `health.list_sample_catalog`
 - `health.read_daily_metrics`
 - `health.read_range_metrics`
+- `health.read_samples`
+- `health.read_daily_raw`
+- `health.inspect_day`
+- `health.list_changes`
 
-### 11.1 `health.read_daily_metrics`
+## 9. Storage Configuration
 
-Inputs:
+The reference MCP implementation reads from one of:
 
-- `date` (YYYY-MM-DD, required)
+- `icloud_drive`
+- `s3_object_store`
 
-Returns:
+Preferred local config file:
 
-- `date` (YYYY-MM-DD)
-- `generated_at` (ISO-8601 UTC)
-- `day` (timezone + boundaries)
-- `metrics` (object, values are number|null)
-- `metric_status` (object)
-- `metric_units` (object)
+- `~/.config/nucleus-apple-mcp/config.toml`
+- Or override path with `NUCLEUS_APPLE_MCP_CONFIG`
+- Or start the server with `nucleus-apple-mcp --config-file /path/to/config.toml`
 
-### 11.2 `health.read_range_metrics`
+Suggested shape:
 
-Inputs:
+```toml
+[health]
+storage_backend = "s3_object_store"
+# icloud_root = "/Users/you/Library/Mobile Documents/iCloud~com~example~Nucleus/Documents"
 
-- `start_date` (YYYY-MM-DD, required)
-- `end_date` (YYYY-MM-DD, required; inclusive)
+[health.s3]
+endpoint = "https://<accountid>.r2.cloudflarestorage.com"
+region = "auto"
+bucket = "your-bucket"
+prefix = "nucleus"
+access_key_id = "..."
+secret_access_key = "..."
+use_path_style = true
+```
 
-Constraints:
+Environment variables remain supported and override file values when present:
 
-- `start_date <= end_date` else `INVALID_ARGUMENTS`
-- maximum span: 366 days (else `INVALID_ARGUMENTS`)
+### 9.1 iCloud Drive
 
-Returns:
+- `NUCLEUS_HEALTH_ICLOUD_ROOT`
+- `NUCLEUS_HEALTH_STORAGE_BACKEND`
 
-- `start_date`
-- `end_date`
-- `data`: array of daily objects (sorted by `date` ascending)
-- `missing_dates`: array of YYYY-MM-DD for which no revision exists
+Absolute path to the app container `Documents/` directory on macOS.
 
----
+If omitted, MCP attempts best-effort discovery under `~/Library/Mobile Documents/**/Documents/`.
 
-## 12. Freshness Policy
+### 9.2 S3-compatible Object Store
 
-- Data is as fresh as the newest available revision for the date.
-- MCP always reports `generated_at` so callers can reason about staleness.
+- `NUCLEUS_HEALTH_S3_ENDPOINT`
+- `NUCLEUS_HEALTH_S3_REGION`
+- `NUCLEUS_HEALTH_S3_BUCKET`
+- `NUCLEUS_HEALTH_S3_PREFIX`
+- `NUCLEUS_HEALTH_S3_ACCESS_KEY_ID`
+- `NUCLEUS_HEALTH_S3_SECRET_ACCESS_KEY`
+- `NUCLEUS_HEALTH_S3_SESSION_TOKEN`
+- `NUCLEUS_HEALTH_S3_USE_PATH_STYLE`
 
----
+## 10. Errors
 
-## 13. Security & Privacy
+- `INVALID_ARGUMENTS`
+- `NOT_AUTHORIZED`
+- `DATA_NOT_FOUND`
+- `STORAGE_UNAVAILABLE`
+- `INTERNAL`
 
-- Collector writes only to private user storage (iCloud Drive / private S3 prefix).
-- v0.x exports only daily aggregates. v1 optionally exports raw samples (JSONL) under `health/v1/raw/...`.
-- MCP reads from storage with user-provided credentials; there is no intermediate ingest server.
+## 11. Product Notes
 
----
-
-## 14. v0.x Acceptance Criteria
-
-- iOS app uploads append-only daily revisions under `health/v0/...`.
-- “Latest” resolution is correct under retries/races (no older revision can overwrite newer data).
-- MCP can read single-day and range results, with explicit missing/unauthorized semantics.
-
----
-
-## 15. Product Naming & Design Language (Non-normative)
-
-- iOS companion app (Collector) product name: **Nucleus**
-- Design language recommendation: use Apple Human Interface Guidelines (HIG) as the baseline (SwiftUI / SF Pro / Dynamic Type / Dark Mode / Accessibility). Keep a neutral, restrained, trustworthy tone (not health-only branding). Prefer a “neutral surfaces + single accent color” token system. Information architecture should foreground provenance, `generated_at`, and authorization/missing states via `metric_status`, with global visibility for connection/sync status.
-
----
-
-## References
-
-[4]: https://developer.apple.com/documentation/healthkit/authorizing_access_to_health_data
-[5]: https://developer.apple.com/documentation/healthkit/hkobserverquery
-[6]: https://developer.apple.com/documentation/backgroundtasks
-[7]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html
+- App name: `Nucleus`
+- The storage layout is optimized for agent reads and MCP consumption, not for long-term archival compatibility.

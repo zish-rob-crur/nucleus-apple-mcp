@@ -27,6 +27,7 @@ struct SyncView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await model.refreshAuthStatus()
+            await model.refreshAnchorDiagnostics()
         }
     }
 }
@@ -42,12 +43,14 @@ private extension SyncView {
     var header: some View {
         NucleusCard("Sync", systemImage: "arrow.triangle.2.circlepath") {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Export daily aggregates (v0) + raw samples (v1 JSONL), then optionally upload to your S3-compatible object store.")
+                Text("Run incremental sync. Nucleus re-exports only the dates touched by HealthKit changes, then optionally uploads them to your S3-compatible object store.")
                     .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 10) {
+                    StatusPill(label: model.anchorDiagnostics.modeLabel, kind: model.anchorDiagnostics.unprimedTypeKeys.isEmpty ? .ok : .warning, systemImage: "bolt.badge.clock")
+                    StatusPill(label: model.backgroundDeliveryStatus.label, kind: backgroundDeliveryKind, systemImage: "waveform.badge.magnifyingglass")
                     StatusPill(label: backendLabel, kind: backendKind, systemImage: backendIcon)
                     StatusPill(label: objectStoreLabel, kind: objectStoreKind, systemImage: objectStoreIcon)
                 }
@@ -64,7 +67,7 @@ private extension SyncView {
                         set: { model.setCatchUpDays($0) }
                     ), in: 1...14) {
                         HStack {
-                            Text("Catch-up window")
+                            Text("Bootstrap / fallback window")
                                 .font(.system(.subheadline, design: .rounded).weight(.semibold))
                                 .foregroundStyle(.primary)
                             Spacer(minLength: 0)
@@ -74,6 +77,11 @@ private extension SyncView {
                         }
                     }
                 }
+
+                Text("Used for the first sync and when HealthKit reports deletions without enough local context.")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Button {
                     model.syncNow(catchUpDays: model.catchUpDays)
@@ -112,28 +120,43 @@ private extension SyncView {
 
                         Spacer(minLength: 0)
 
-                        StatusPill(label: "latest.json", kind: .neutral)
+                        StatusPill(label: "snapshot", kind: .neutral)
                     }
 
-                    let revisionPath = written.revisionURL.path(percentEncoded: false)
-                    Text(revisionPath)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(2)
-                        .contextMenu {
-                            Button("Copy") { UIPasteboard.general.string = revisionPath }
+                    NucleusInset {
+                        VStack(alignment: .leading, spacing: 10) {
+                            fileLine(
+                                title: "Summary",
+                                fileName: written.dailyURL.lastPathComponent,
+                                pathToCopy: written.dailyURL.path(percentEncoded: false)
+                            )
+
+                            fileLine(
+                                title: "Month",
+                                fileName: written.monthURL.lastPathComponent,
+                                pathToCopy: written.monthURL.path(percentEncoded: false)
+                            )
+
+                            if let rawWritten = model.lastRawWritten {
+                                fileLine(
+                                    title: "Raw",
+                                    fileName: rawWritten.manifestURL.lastPathComponent,
+                                    pathToCopy: rawWritten.manifestURL.path(percentEncoded: false)
+                                )
+                            }
                         }
+                    }
 
                     HStack(spacing: 10) {
-                        ShareLink(item: written.revisionURL) {
-                            Label("Share JSON", systemImage: "square.and.arrow.up")
+                        ShareLink(item: written.dailyURL) {
+                            Label("Share Summary", systemImage: "square.and.arrow.up")
                                 .labelStyle(.titleAndIcon)
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(NucleusButtonStyle(kind: .secondary))
 
-                        ShareLink(item: written.latestURL) {
-                            Label("Share latest.json", systemImage: "link")
+                        ShareLink(item: written.monthURL) {
+                            Label("Share Month Index", systemImage: "link")
                                 .labelStyle(.titleAndIcon)
                                 .frame(maxWidth: .infinity)
                         }
@@ -141,32 +164,25 @@ private extension SyncView {
                     }
 
                     if let rawWritten = model.lastRawWritten {
-                        Divider()
-                            .overlay(Color.primary.opacity(0.10))
-
-                        let rawPath = rawWritten.rawURL.path(percentEncoded: false)
-                        Text(rawPath)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(Color.secondary)
-                            .lineLimit(2)
-                            .contextMenu {
-                                Button("Copy") { UIPasteboard.general.string = rawPath }
-                            }
-
                         HStack(spacing: 10) {
-                            ShareLink(item: rawWritten.rawURL) {
-                                Label("Share JSONL", systemImage: "doc.plaintext")
+                            ShareLink(item: rawWritten.manifestURL) {
+                                Label("Share Raw Manifest", systemImage: "doc.plaintext")
                                     .labelStyle(.titleAndIcon)
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(NucleusButtonStyle(kind: .secondary))
 
-                            ShareLink(item: rawWritten.metaURL) {
-                                Label("Share Meta", systemImage: "doc.text")
-                                    .labelStyle(.titleAndIcon)
-                                    .frame(maxWidth: .infinity)
+                            if let firstSampleURL = rawWritten.sampleURLs.first {
+                                ShareLink(item: firstSampleURL) {
+                                    Label("Share First Raw File", systemImage: "doc.text")
+                                        .labelStyle(.titleAndIcon)
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(NucleusButtonStyle(kind: .ghost))
+                            } else {
+                                Color.clear
+                                    .frame(maxWidth: .infinity, minHeight: 1)
                             }
-                            .buttonStyle(NucleusButtonStyle(kind: .ghost))
                         }
                     }
                 } else {
@@ -261,8 +277,21 @@ private extension SyncView {
         }
     }
 
+    var backgroundDeliveryKind: StatusPill.Kind {
+        switch model.backgroundDeliveryStatus {
+        case .idle:
+            .neutral
+        case .needsAuthorization:
+            .warning
+        case .ready:
+            .ok
+        case .error:
+            .error
+        }
+    }
+
     var objectStoreLabel: String {
-        model.objectStoreSettings.enabled ? "S3 on" : "S3 off"
+        model.objectStoreSettings.enabled ? "S3 On" : "S3 Off"
     }
 
     var objectStoreIcon: String {
@@ -284,6 +313,28 @@ private extension SyncView {
     func compactTimezone(_ identifier: String) -> String {
         let last = identifier.split(separator: "/").last.map(String.init) ?? identifier
         return last.replacingOccurrences(of: "_", with: " ")
+    }
+
+    @ViewBuilder
+    func fileLine(title: String, fileName: String, pathToCopy: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(title)
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .foregroundStyle(Color.secondary)
+                .frame(width: 70, alignment: .leading)
+
+            Text(fileName)
+                .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .contextMenu {
+                    Button("Copy Path") { UIPasteboard.general.string = pathToCopy }
+                    Button("Copy Name") { UIPasteboard.general.string = fileName }
+                }
+
+            Spacer(minLength: 0)
+        }
     }
 }
 
@@ -368,6 +419,20 @@ private struct MetricTile: View {
             return value.formatted(.number.precision(.fractionLength(0)))
         case .hrvSdnnAvg:
             return value.formatted(.number.precision(.fractionLength(0...1)))
+        case .vo2Max:
+            return value.formatted(.number.precision(.fractionLength(1)))
+        case .oxygenSaturationPct, .bodyFatPercentage:
+            return value.formatted(.number.precision(.fractionLength(1)))
+        case .respiratoryRateAvg:
+            return value.formatted(.number.precision(.fractionLength(1)))
+        case .wristTemperatureCelsius, .bodyTemperatureCelsius, .basalBodyTemperatureCelsius:
+            return value.formatted(.number.precision(.fractionLength(1)))
+        case .bodyMassKg:
+            return value.formatted(.number.precision(.fractionLength(1)))
+        case .bloodPressureSystolicMmhg, .bloodPressureDiastolicMmhg:
+            return value.formatted(.number.precision(.fractionLength(0)))
+        case .bloodGlucoseMgDl:
+            return value.formatted(.number.precision(.fractionLength(0)))
         }
     }
 

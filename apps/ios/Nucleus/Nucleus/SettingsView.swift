@@ -123,11 +123,11 @@ private extension SettingsView {
     var storageChipLabel: String {
         switch model.storageStatus?.backend {
         case .icloudDrive:
-            "icloud"
+            "iCloud"
         case .localDocuments:
-            "local"
+            "Local"
         case nil:
-            "unknown"
+            "Unknown"
         }
     }
 
@@ -151,8 +151,8 @@ private extension SettingsView {
     }
 
     var objectStoreChipLabel: String {
-        if !model.objectStoreSettings.enabled { return "s3 off" }
-        return model.resolvedObjectStoreConfig() != nil ? "s3 ready" : "s3 setup"
+        if !model.objectStoreSettings.enabled { return "S3 Off" }
+        return model.resolvedObjectStoreConfig() != nil ? "S3 Ready" : "S3 Setup"
     }
 
     var objectStoreChipIcon: String {

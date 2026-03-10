@@ -4,6 +4,7 @@ import UIKit
 struct OverviewView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var selectedTab: RootTab
 
     @State private var appear = false
@@ -39,6 +40,7 @@ struct OverviewView: View {
         }
         .task {
             await model.refreshAuthStatus()
+            await model.refreshAnchorDiagnostics()
             model.refreshStorageStatus(preferICloud: model.preferICloud)
         }
     }
@@ -53,7 +55,8 @@ struct OverviewView: View {
 
 private extension OverviewView {
     var header: some View {
-        let cornerRadius: CGFloat = 30
+        let cornerRadius: CGFloat = 28
+        let accentOpacity: Double = colorScheme == .dark ? 0.20 : 0.10
 
         return VStack(alignment: .leading, spacing: 12) {
             Text("Nucleus")
@@ -63,7 +66,7 @@ private extension OverviewView {
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
 
-            Text("Local-first HealthKit exporter")
+            Text("Local-first personal data exporter")
                 .font(.system(.subheadline, design: .rounded).weight(.medium))
                 .foregroundStyle(Color.secondary)
                 .lineLimit(2)
@@ -80,7 +83,7 @@ private extension OverviewView {
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    NucleusPalette.accent.opacity(0.20),
+                                    NucleusPalette.accent.opacity(accentOpacity),
                                     .clear,
                                 ],
                                 center: .topTrailing,
@@ -88,7 +91,7 @@ private extension OverviewView {
                                 endRadius: 420
                             )
                         )
-                        .blendMode(.plusLighter)
+                        .blendMode(colorScheme == .dark ? .plusLighter : .screen)
                 )
         }
         .overlay(alignment: .topTrailing) {
@@ -104,19 +107,13 @@ private extension OverviewView {
     }
 
     var headerChips: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                StatusPill(label: "collector", kind: .neutral, systemImage: "dot.radiowaves.left.and.right")
-                StatusPill(label: "health v0 + raw v1", kind: .neutral, systemImage: "heart.text.square")
-            }
-
-            HStack(spacing: 10) {
-                StatusPill(label: healthStatusChip, kind: healthStatusKind, systemImage: healthStatusIcon)
-                StatusPill(label: backendLabel, kind: backendKind, systemImage: backendIcon)
-                StatusPill(label: objectStoreLabel, kind: objectStoreKind, systemImage: objectStoreIcon)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 10) {
+                    StatusPill(label: healthStatusChip, kind: healthStatusKind, systemImage: healthStatusIcon)
+                    StatusPill(label: model.anchorDiagnostics.modeLabel, kind: model.anchorDiagnostics.unprimedTypeKeys.isEmpty ? .ok : .warning, systemImage: "bolt.badge.clock")
+                    StatusPill(label: backendChipLabel, kind: backendKind, systemImage: backendIcon)
+                    StatusPill(label: objectStoreLabel, kind: objectStoreKind, systemImage: objectStoreIcon)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     var statusCard: some View {
@@ -196,7 +193,7 @@ private extension OverviewView {
                 .disabled(model.isSyncing)
 
                 HStack(spacing: 10) {
-                    NucleusInlineStat(title: "Catch-up", value: "\(model.catchUpDays)d")
+                    NucleusInlineStat(title: "Window", value: "\(model.catchUpDays)d")
                     NucleusInlineStat(title: "iCloud", value: model.preferICloud ? "preferred" : "off")
                 }
 
@@ -236,7 +233,7 @@ private extension OverviewView {
 
                         Spacer(minLength: 0)
 
-                        StatusPill(label: "latest.json", kind: .neutral)
+                        StatusPill(label: "snapshot", kind: .neutral)
                     }
 
                     if let revision = model.latestRevision {
@@ -245,37 +242,45 @@ private extension OverviewView {
                             .foregroundStyle(.primary)
                     }
 
-                    let revisionPath = written.revisionURL.path(percentEncoded: false)
-                    Text(revisionPath)
-                        .font(.system(.caption2, design: .monospaced))
+                    Text("Saved to \(backendLabel)")
+                        .font(.system(.footnote, design: .rounded))
                         .foregroundStyle(Color.secondary)
-                        .lineLimit(2)
-                        .contextMenu {
-                            Button("Copy") { UIPasteboard.general.string = revisionPath }
-                        }
 
-                    if let rawWritten = model.lastRawWritten {
-                        let rawPath = rawWritten.rawURL.path(percentEncoded: false)
-                        Text(rawPath)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(Color.secondary)
-                            .lineLimit(2)
-                            .contextMenu {
-                                Button("Copy") { UIPasteboard.general.string = rawPath }
+                    NucleusInset {
+                        VStack(alignment: .leading, spacing: 10) {
+                            fileLine(
+                                title: "Summary",
+                                fileName: written.dailyURL.lastPathComponent,
+                                pathToCopy: written.dailyURL.path(percentEncoded: false)
+                            )
+
+                            fileLine(
+                                title: "Month",
+                                fileName: written.monthURL.lastPathComponent,
+                                pathToCopy: written.monthURL.path(percentEncoded: false)
+                            )
+
+                            if let rawWritten = model.lastRawWritten {
+                                fileLine(
+                                    title: "Raw",
+                                    fileName: rawWritten.manifestURL.lastPathComponent,
+                                    pathToCopy: rawWritten.manifestURL.path(percentEncoded: false)
+                                )
                             }
+                        }
                     }
 
                     HStack(spacing: 10) {
-                        ShareLink(item: written.revisionURL) {
-                            Label("Share JSON", systemImage: "square.and.arrow.up")
+                        ShareLink(item: written.dailyURL) {
+                            Label("Share Summary", systemImage: "square.and.arrow.up")
                                 .labelStyle(.titleAndIcon)
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(NucleusButtonStyle(kind: .ghost))
 
                         if let rawWritten = model.lastRawWritten {
-                            ShareLink(item: rawWritten.rawURL) {
-                                Label("Share JSONL", systemImage: "doc.plaintext")
+                            ShareLink(item: rawWritten.manifestURL) {
+                                Label("Share Raw Manifest", systemImage: "doc.plaintext")
                                     .labelStyle(.titleAndIcon)
                                     .frame(maxWidth: .infinity)
                             }
@@ -316,6 +321,17 @@ private extension OverviewView {
         }
     }
 
+    var backendChipLabel: String {
+        switch model.storageStatus?.backend {
+        case .icloudDrive:
+            "iCloud"
+        case .localDocuments:
+            "Local"
+        case nil:
+            "Storage"
+        }
+    }
+
     var backendIcon: String {
         switch model.storageStatus?.backend {
         case .icloudDrive:
@@ -336,7 +352,7 @@ private extension OverviewView {
     }
 
     var objectStoreLabel: String {
-        model.objectStoreSettings.enabled ? "S3 on" : "S3 off"
+        model.objectStoreSettings.enabled ? "S3 On" : "S3 Off"
     }
 
     var objectStoreIcon: String {
@@ -376,10 +392,10 @@ private extension OverviewView {
 
     var healthStatusChip: String {
         switch model.authRequestStatus {
-        case .shouldRequest: "needs_access"
-        case .unnecessary: "ready"
-        case .unknown: "unknown"
-        @unknown default: "unknown"
+        case .shouldRequest: "Access"
+        case .unnecessary: "Ready"
+        case .unknown: "Unknown"
+        @unknown default: "Unknown"
         }
     }
 
@@ -408,5 +424,27 @@ private extension OverviewView {
     func openSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         openURL(url)
+    }
+
+    @ViewBuilder
+    func fileLine(title: String, fileName: String, pathToCopy: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(title)
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .foregroundStyle(Color.secondary)
+                .frame(width: 70, alignment: .leading)
+
+            Text(fileName)
+                .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .contextMenu {
+                    Button("Copy Path") { UIPasteboard.general.string = pathToCopy }
+                    Button("Copy Name") { UIPasteboard.general.string = fileName }
+                }
+
+            Spacer(minLength: 0)
+        }
     }
 }

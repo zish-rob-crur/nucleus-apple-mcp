@@ -13,15 +13,15 @@ enum NucleusPalette {
 
 enum NucleusStyle {
     static func surface(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white.opacity(0.05) : Color.black.opacity(0.05)
+        scheme == .dark ? Color.white.opacity(0.05) : Color.black.opacity(0.04)
     }
 
     static func surfaceStrong(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.10)
+        scheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
     }
 
     static func stroke(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.10)
+        scheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
     }
 
     static func shadow(_ scheme: ColorScheme) -> Color {
@@ -68,12 +68,12 @@ struct NucleusBackground: View {
                 ], startPoint: .topLeading, endPoint: .bottomTrailing)
 
                 NucleusAurora()
-                    .opacity(0.55)
+                    .opacity(0.18)
                     .blendMode(.screen)
 
                 RadialGradient(
                     colors: [
-                        NucleusPalette.accent.opacity(0.16),
+                        NucleusPalette.accent.opacity(0.06),
                         .clear,
                     ],
                     center: .topTrailing,
@@ -82,12 +82,8 @@ struct NucleusBackground: View {
                 )
 
                 NucleusGrid()
-                    .opacity(0.10)
+                    .opacity(0.045)
                     .blendMode(.normal)
-
-                NucleusScanlines()
-                    .opacity(0.035)
-                    .blendMode(.overlay)
             }
         }
         .ignoresSafeArea()
@@ -99,10 +95,13 @@ struct NucleusAurora: View {
 
     var body: some View {
         ZStack {
+            let primary = NucleusPalette.accent.opacity(colorScheme == .dark ? 0.70 : 0.42)
+            let secondary = NucleusPalette.accentDeep.opacity(colorScheme == .dark ? 0.15 : 0.08)
+
             Circle()
                 .fill(
                     LinearGradient(
-                        colors: [NucleusPalette.accent.opacity(0.70), NucleusPalette.accentDeep.opacity(0.15), .clear],
+                        colors: [primary, secondary, .clear],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -115,8 +114,8 @@ struct NucleusAurora: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.10),
-                            NucleusPalette.accent.opacity(0.10),
+                            Color.white.opacity(colorScheme == .dark ? 0.10 : 0.06),
+                            NucleusPalette.accent.opacity(colorScheme == .dark ? 0.10 : 0.06),
                             .clear,
                         ],
                         startPoint: .top,
@@ -157,7 +156,7 @@ struct NucleusGrid: View {
 
             var glow = Path()
             glow.addRect(CGRect(origin: .zero, size: size).insetBy(dx: 0.3, dy: 0.3))
-            let glowColor = NucleusPalette.accent.opacity(colorScheme == .dark ? 0.22 : 0.14)
+            let glowColor = NucleusPalette.accent.opacity(colorScheme == .dark ? 0.22 : 0.08)
             context.stroke(glow, with: .color(glowColor), lineWidth: 0.8)
         }
         .allowsHitTesting(false)
@@ -230,28 +229,32 @@ struct NucleusCard<Content: View>: View {
 }
 
 struct NucleusCardBackground: View {
-    var cornerRadius: CGFloat = 22
+    var cornerRadius: CGFloat = 26
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        let mist = colorScheme == .dark ? NucleusPalette.mist : Color.black.opacity(0.06)
-        let mistStrong = colorScheme == .dark ? NucleusPalette.mistStrong : Color.black.opacity(0.10)
-        let material: Material = colorScheme == .dark ? .ultraThinMaterial : .thinMaterial
+        let mist = colorScheme == .dark ? NucleusPalette.mist : Color.black.opacity(0.04)
+        let mistStrong = colorScheme == .dark ? NucleusPalette.mistStrong : Color.black.opacity(0.08)
+        let material: Material = colorScheme == .dark ? .ultraThinMaterial : .regularMaterial
+        let accentStroke = NucleusPalette.accent.opacity(colorScheme == .dark ? 0.16 : 0.07)
 
         shape
             .fill(material)
             .overlay(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(colorScheme == .dark ? 0.09 : 0.65),
-                        Color.white.opacity(colorScheme == .dark ? 0.02 : 0.25),
-                        Color.black.opacity(colorScheme == .dark ? 0.18 : 0.08),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .blendMode(.overlay)
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(colorScheme == .dark ? 0.09 : 0.22),
+                                Color.white.opacity(colorScheme == .dark ? 0.02 : 0.10),
+                                Color.black.opacity(colorScheme == .dark ? 0.18 : 0.04),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .blendMode(.overlay)
             )
             .overlay(
                 shape.stroke(
@@ -268,7 +271,7 @@ struct NucleusCardBackground: View {
                 )
             )
             .overlay(
-                shape.strokeBorder(NucleusPalette.accent.opacity(0.16), lineWidth: 1)
+                shape.strokeBorder(accentStroke, lineWidth: 1)
                     .mask(
                         LinearGradient(
                             colors: [.white, .clear, .clear],
@@ -293,9 +296,9 @@ struct NucleusInset<Content: View>: View {
         content
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(NucleusStyle.surface(colorScheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(NucleusStyle.surface(colorScheme), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(NucleusStyle.stroke(colorScheme), lineWidth: 1)
             )
     }
@@ -310,7 +313,7 @@ struct NucleusTerminal<Content: View>: View {
     }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
 
         content
             .padding(12)
@@ -319,16 +322,19 @@ struct NucleusTerminal<Content: View>: View {
                 shape
                     .fill(colorScheme == .dark ? Color.black.opacity(0.26) : Color.black.opacity(0.05))
                     .overlay(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(colorScheme == .dark ? 0.08 : 0.18),
-                                .clear,
-                                Color.black.opacity(colorScheme == .dark ? 0.30 : 0.10),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        .blendMode(.overlay)
+                        shape
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .dark ? 0.08 : 0.14),
+                                        .clear,
+                                        Color.black.opacity(colorScheme == .dark ? 0.30 : 0.08),
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .blendMode(.overlay)
                     )
                     .overlay(
                         shape.stroke(NucleusStyle.stroke(colorScheme), lineWidth: 1)
@@ -346,21 +352,24 @@ struct NucleusTileBackground: View {
     }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
 
         shape
             .fill(NucleusStyle.surface(colorScheme))
             .overlay(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(colorScheme == .dark ? 0.14 : 0.55),
-                        Color.white.opacity(colorScheme == .dark ? 0.02 : 0.22),
-                        Color.black.opacity(colorScheme == .dark ? 0.22 : 0.08),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .blendMode(.overlay)
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(colorScheme == .dark ? 0.14 : 0.30),
+                                Color.white.opacity(colorScheme == .dark ? 0.02 : 0.12),
+                                Color.black.opacity(colorScheme == .dark ? 0.22 : 0.05),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .blendMode(.overlay)
             )
             .overlay(
                 shape.stroke(NucleusStyle.stroke(colorScheme), lineWidth: 1)
@@ -413,7 +422,7 @@ struct StatusPill: View {
             Capsule(style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [Color.white.opacity(colorScheme == .dark ? 0.22 : 0.35), .clear],
+                        colors: [Color.white.opacity(colorScheme == .dark ? 0.22 : 0.22), .clear],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -439,7 +448,7 @@ struct StatusPill: View {
 
     private var background: Color {
         switch kind {
-        case .ok: NucleusPalette.accent.opacity(0.10)
+        case .ok: NucleusPalette.accent.opacity(colorScheme == .dark ? 0.10 : 0.08)
         case .neutral: NucleusStyle.surface(colorScheme)
         case .warning: NucleusPalette.warning.opacity(0.10)
         case .error: NucleusPalette.danger.opacity(0.10)
@@ -489,7 +498,7 @@ struct NucleusOrb: View {
                 )
                 .overlay(
                     Circle()
-                        .stroke(.white.opacity(0.08), lineWidth: 1)
+                        .stroke(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.08), lineWidth: 1)
                         .blur(radius: 0.2)
                 )
                 .scaleEffect(breathe ? 1.02 : 0.98)
@@ -519,7 +528,11 @@ struct NucleusOrb: View {
     private var glowColors: [Color] {
         switch state {
         case .idle:
-            [NucleusPalette.accent.opacity(0.55), NucleusPalette.accent.opacity(0.10), .clear]
+            [
+                NucleusPalette.accent.opacity(colorScheme == .dark ? 0.55 : 0.24),
+                NucleusPalette.accent.opacity(colorScheme == .dark ? 0.10 : 0.05),
+                .clear,
+            ]
         case .syncing:
             [Color.primary.opacity(colorScheme == .dark ? 0.65 : 0.35), NucleusPalette.accent.opacity(0.18), .clear]
         case .needsPermission:
@@ -532,7 +545,11 @@ struct NucleusOrb: View {
     private var ringColors: [Color] {
         switch state {
         case .idle:
-            [NucleusPalette.accent.opacity(0.30), Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.06), NucleusPalette.accent.opacity(0.22)]
+            if colorScheme == .dark {
+                [NucleusPalette.accent.opacity(0.30), Color.white.opacity(0.08), NucleusPalette.accent.opacity(0.22)]
+            } else {
+                [NucleusPalette.accent.opacity(0.16), Color.white.opacity(0.18), NucleusPalette.accent.opacity(0.12)]
+            }
         case .syncing:
             [Color.primary.opacity(colorScheme == .dark ? 0.25 : 0.16), NucleusPalette.accent.opacity(0.28), Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08)]
         case .needsPermission:
@@ -563,7 +580,7 @@ struct NucleusButtonStyle: ButtonStyle {
     @Environment(\.colorScheme) private var colorScheme
 
     func makeBody(configuration: Configuration) -> some View {
-        let cornerRadius: CGFloat = 16
+        let cornerRadius: CGFloat = 18
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
         configuration.label
