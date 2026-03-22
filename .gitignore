@@ -213,3 +213,9 @@ DerivedData/
 *.xcworkspace/xcuserdata/
 *.xcuserstate
 *.xccheckout
+
+# Local macOS / iOS app residue
+.DS_Store
+apps/ios/Nucleus/Nucleus.xcodeproj/project.xcworkspace/
+apps/ios/Nucleus/Nucleus.xcodeproj/xcuserdata/
+apps/ios/Nucleus/_disabled_assets/
