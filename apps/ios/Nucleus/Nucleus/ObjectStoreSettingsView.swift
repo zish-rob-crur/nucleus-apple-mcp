@@ -16,7 +16,7 @@ struct ObjectStoreSettingsView: View {
     @State private var secretAccessKey = ""
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
+        ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 statusCard
                 connectionCard
@@ -30,6 +30,7 @@ struct ObjectStoreSettingsView: View {
             .padding(.bottom, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.hidden)
         .background(NucleusBackground())
         .navigationTitle("Object Store")
         .navigationBarTitleDisplayMode(.inline)
@@ -179,7 +180,7 @@ private extension ObjectStoreSettingsView {
         NucleusCard("Credentials", systemImage: "key.fill") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("Stored in Keychain on this device.")
+                    Text("Stored in Keychain.")
                         .font(.system(.subheadline, design: .rounded))
                         .foregroundStyle(Color.secondary)
 

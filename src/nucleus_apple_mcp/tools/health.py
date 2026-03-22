@@ -5,12 +5,14 @@ import datetime as dt
 import hashlib
 import hmac
 import json
+import math
 import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
+from statistics import StatisticsError, mean, median, quantiles
 from typing import Annotated, Any, Literal, Protocol
 from urllib.parse import quote, urlparse
 
@@ -26,7 +28,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 health_router = FastMCP(name="health")
 
-_StorageBackendName = Literal["auto", "icloud_drive", "s3_object_store"]
+_StorageBackendName = Literal["auto", "s3_object_store"]
 
 
 class HealthSampleKind(str, Enum):
@@ -353,6 +355,16 @@ _METRIC_SOURCE_CATALOG: dict[str, _MetricSourceCatalogEntry] = {
     ),
 }
 
+_DEFAULT_ANALYSIS_METRIC_KEYS: tuple[str, ...] = tuple(_METRIC_SOURCE_CATALOG.keys())
+_NOTABLE_ANALYSIS_METRIC_KEYS: tuple[str, ...] = (
+    "steps",
+    "resting_hr_avg",
+    "hrv_sdnn_avg",
+    "oxygen_saturation_pct",
+    "respiratory_rate_avg",
+    "sleep_asleep_minutes",
+)
+
 
 class _DataNotFound(Exception):
     pass
@@ -428,7 +440,8 @@ class _HealthS3ConfigModel(BaseModel):
 class _HealthConfigModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    storage_backend: _StorageBackendName | None = None
+    # Keep these as strings so we can emit an explicit deprecation message for old configs.
+    storage_backend: str | None = None
     icloud_root: str | None = None
     s3: _HealthS3ConfigModel = Field(default_factory=_HealthS3ConfigModel)
 
@@ -472,7 +485,12 @@ def _configured_storage_backend() -> _StorageBackendName | None:
         raw = (_load_app_config().health.storage_backend or "").strip()
     if not raw:
         return None
-    if raw not in {"auto", "icloud_drive", "s3_object_store"}:
+    if raw == "icloud_drive":
+        _raise(
+            "INVALID_ARGUMENTS",
+            "the `icloud_drive` health backend has been removed. Configure `s3_object_store` instead.",
+        )
+    if raw not in {"auto", "s3_object_store"}:
         _raise("INVALID_ARGUMENTS", f"invalid storage backend in config: {raw}")
     return raw
 
@@ -484,36 +502,6 @@ class _StorageBackend(Protocol):
 
     @property
     def backend(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class _ICloudDriveBackend:
-    root: Path
-
-    @property
-    def backend(self) -> str:
-        return "icloud_drive"
-
-    def read_bytes(self, relpath: str) -> bytes:
-        path = self.root.joinpath(*relpath.strip("/").split("/"))
-        try:
-            return path.read_bytes()
-        except FileNotFoundError as exc:
-            raise _DataNotFound(relpath) from exc
-        except PermissionError as exc:
-            raise ToolError(f"NOT_AUTHORIZED: permission denied reading {path}") from exc
-
-    def list_keys(self, relprefix: str) -> list[str]:
-        parts = [part for part in relprefix.strip("/").split("/") if part]
-        base = self.root.joinpath(*parts) if parts else self.root
-        if not base.exists() or not base.is_dir():
-            return []
-        keys: list[str] = []
-        for path in base.rglob("*"):
-            if path.is_file():
-                keys.append(path.relative_to(self.root).as_posix())
-        keys.sort()
-        return keys
 
 
 @dataclass(frozen=True)
@@ -787,56 +775,23 @@ class _S3Backend:
         return relkeys
 
 
-def _discover_icloud_documents_root() -> Path | None:
-    override = (os.getenv("NUCLEUS_HEALTH_ICLOUD_ROOT") or "").strip()
-    if override:
-        path = Path(os.path.expanduser(override)).resolve()
-        if not path.exists():
-            _raise("STORAGE_UNAVAILABLE", f"NUCLEUS_HEALTH_ICLOUD_ROOT does not exist: {path}")
-        return path
+def _reject_removed_icloud_config() -> None:
+    if (os.getenv("NUCLEUS_HEALTH_ICLOUD_ROOT") or "").strip():
+        _raise(
+            "INVALID_ARGUMENTS",
+            "NUCLEUS_HEALTH_ICLOUD_ROOT is no longer supported. Configure S3-compatible storage instead.",
+        )
 
     configured = (_load_app_config().health.icloud_root or "").strip()
     if configured:
-        path = Path(os.path.expanduser(configured)).resolve()
-        if not path.exists():
-            _raise("STORAGE_UNAVAILABLE", f"configured iCloud root does not exist: {path}")
-        return path
-
-    base = Path.home() / "Library" / "Mobile Documents"
-    if not base.exists():
-        return None
-
-    candidates: list[Path] = []
-    for entry in base.iterdir():
-        if not entry.is_dir():
-            continue
-        docs = entry / "Documents"
-        if (docs / "health" / "daily").exists() or (docs / "health" / "raw").exists():
-            candidates.append(docs)
-
-    if not candidates:
-        return None
-    if len(candidates) == 1:
-        return candidates[0]
-
-    for candidate in candidates:
-        name = candidate.parent.name.lower()
-        if name.startswith("icloud~") and "nucleus" in name:
-            return candidate
-
-    _raise(
-        "STORAGE_UNAVAILABLE",
-        "Multiple iCloud candidates found. Set NUCLEUS_HEALTH_ICLOUD_ROOT explicitly to the app container Documents path.",
-    )
-    return None
+        _raise(
+            "INVALID_ARGUMENTS",
+            "health.icloud_root is no longer supported. Configure `health.s3` instead.",
+        )
 
 
-def _resolve_storage_backend(backend: Literal["auto", "icloud_drive", "s3_object_store"]) -> _StorageBackend:
-    if backend == "icloud_drive":
-        root = _discover_icloud_documents_root()
-        if not root:
-            _raise("STORAGE_UNAVAILABLE", "iCloud Drive root not found. Enable iCloud sync or set NUCLEUS_HEALTH_ICLOUD_ROOT.")
-        return _ICloudDriveBackend(root=root)
+def _resolve_storage_backend(backend: Literal["auto", "s3_object_store"]) -> _StorageBackend:
+    _reject_removed_icloud_config()
 
     if backend == "s3_object_store":
         config = _load_s3_config()
@@ -851,17 +806,13 @@ def _resolve_storage_backend(backend: Literal["auto", "icloud_drive", "s3_object
     if preferred_backend and preferred_backend != "auto":
         return _resolve_storage_backend(preferred_backend)
 
-    root = _discover_icloud_documents_root()
-    if root:
-        return _ICloudDriveBackend(root=root)
-
     config = _load_s3_config()
     if config:
         return _S3Backend(config)
 
     _raise(
         "NOT_AUTHORIZED",
-        "No storage configured. Set NUCLEUS_HEALTH_ICLOUD_ROOT or S3 env vars (ENDPOINT/BUCKET/ACCESS_KEY_ID/SECRET_ACCESS_KEY).",
+        "No supported storage configured. Set S3 env vars (ENDPOINT/BUCKET/ACCESS_KEY_ID/SECRET_ACCESS_KEY) or configure `health.s3`.",
     )
     raise AssertionError("unreachable")
 
@@ -1466,39 +1417,17 @@ def _inspect_day_impl(
     }
 
 
-@health_router.tool(
-    name="health.read_daily_metrics",
-    description="Read one day's exported Health metrics snapshot from iCloud Drive or an S3-compatible object store.",
-)
-def read_daily_metrics(
-    date: Annotated[str, Field(description="Date (YYYY-MM-DD).")],
-    storage_backend: Annotated[
-        Literal["auto", "icloud_drive", "s3_object_store"],
-        Field(description="Storage backend to read from."),
-    ] = "auto",
-) -> dict[str, Any]:
-    day = _parse_ymd(date)
-    backend = _resolve_storage_backend(storage_backend)
-
-    try:
-        snapshot = _read_daily_snapshot(day, backend)
-    except _DataNotFound:
-        _raise("DATA_NOT_FOUND", f"No daily metrics found for {date}.")
-
-    return _public_daily_snapshot(snapshot, backend.backend)
+@dataclass(frozen=True)
+class _MetricObservation:
+    date: str
+    value: float
 
 
-@health_router.tool(
-    name="health.read_range_metrics",
-    description="Read a date range of exported daily metrics using monthly indexes. Missing dates are reported, not treated as an error.",
-)
-def read_range_metrics(
-    start_date: Annotated[str, Field(description="Start date (YYYY-MM-DD).")],
-    end_date: Annotated[str, Field(description="End date (YYYY-MM-DD), inclusive.")],
-    storage_backend: Annotated[
-        Literal["auto", "icloud_drive", "s3_object_store"],
-        Field(description="Storage backend to read from."),
-    ] = "auto",
+def _read_range_metrics_impl(
+    *,
+    start_date: str,
+    end_date: str,
+    storage_backend: _StorageBackendName,
 ) -> dict[str, Any]:
     start = _parse_ymd(start_date)
     end = _parse_ymd(end_date)
@@ -1548,6 +1477,569 @@ def read_range_metrics(
     }
 
 
+def _coerce_numeric(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        result = float(value)
+        if math.isfinite(result):
+            return result
+    return None
+
+
+def _rounded(value: float | None) -> float | None:
+    if value is None:
+        return None
+    rounded = round(value, 2)
+    if rounded == -0.0:
+        return 0.0
+    return rounded
+
+
+def _metric_unit_from_snapshots(snapshots: list[dict[str, Any]], metric_key: str) -> str | None:
+    for snapshot in snapshots:
+        metric_units = snapshot.get("metric_units")
+        if not isinstance(metric_units, dict):
+            continue
+        unit = metric_units.get(metric_key)
+        if isinstance(unit, str) and unit:
+            return unit
+    return None
+
+
+def _metric_status_counts(snapshots: list[dict[str, Any]], metric_key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for snapshot in snapshots:
+        metric_status = snapshot.get("metric_status")
+        if not isinstance(metric_status, dict):
+            continue
+        status = metric_status.get(metric_key)
+        if not isinstance(status, str) or not status:
+            continue
+        counts[status] = counts.get(status, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _metric_value_is_plausible(snapshot: dict[str, Any], metric_key: str, value: float) -> bool:
+    metrics = snapshot.get("metrics") if isinstance(snapshot.get("metrics"), dict) else {}
+    if metric_key == "steps":
+        return 0 <= value <= 100_000
+    if metric_key == "resting_hr_avg":
+        return 20 <= value <= 220
+    if metric_key == "hrv_sdnn_avg":
+        return 0 < value <= 300
+    if metric_key == "vo2_max":
+        return 5 <= value <= 100
+    if metric_key == "oxygen_saturation_pct":
+        return 70 <= value <= 100
+    if metric_key == "respiratory_rate_avg":
+        return 5 <= value <= 40
+    if metric_key == "sleep_asleep_minutes":
+        in_bed = _coerce_numeric(metrics.get("sleep_in_bed_minutes"))
+        if not 60 <= value <= 1080:
+            return False
+        if in_bed is not None and value > in_bed + 60:
+            return False
+        return True
+    if metric_key == "sleep_in_bed_minutes":
+        asleep = _coerce_numeric(metrics.get("sleep_asleep_minutes"))
+        if not 60 <= value <= 1440:
+            return False
+        if asleep is not None and asleep > value + 60:
+            return False
+        return True
+    if metric_key == "body_mass_kg":
+        return 20 <= value <= 500
+    if metric_key == "body_fat_percentage":
+        return 1 <= value <= 80
+    if metric_key in {"blood_pressure_systolic_mmhg", "blood_pressure_diastolic_mmhg"}:
+        return 20 <= value <= 300
+    if metric_key == "blood_glucose_mg_dl":
+        return 20 <= value <= 500
+    if metric_key in {"wrist_temperature_celsius", "body_temperature_celsius", "basal_body_temperature_celsius"}:
+        return 25 <= value <= 45
+    return True
+
+
+def _metric_observations(
+    snapshots: list[dict[str, Any]],
+    metric_key: str,
+) -> tuple[list[_MetricObservation], list[dict[str, Any]]]:
+    observations: list[_MetricObservation] = []
+    excluded_dates: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        metrics = snapshot.get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        value = _coerce_numeric(metrics.get(metric_key))
+        if value is None:
+            continue
+        if not _metric_value_is_plausible(snapshot, metric_key, value):
+            excluded_dates.append(
+                {
+                    "date": snapshot.get("date"),
+                    "value": _rounded(value),
+                    "reason": "implausible_value",
+                }
+            )
+            continue
+        date_value = snapshot.get("date")
+        if not isinstance(date_value, str):
+            continue
+        observations.append(_MetricObservation(date=date_value, value=value))
+    return observations, excluded_dates
+
+
+def _segment_ranges(start: dt.date, end: dt.date, segment_count: int) -> list[tuple[dt.date, dt.date]]:
+    dates = _iter_dates(start, end)
+    if not dates:
+        return []
+    bounded_count = max(1, min(segment_count, len(dates)))
+    base_size = len(dates) // bounded_count
+    remainder = len(dates) % bounded_count
+
+    segments: list[tuple[dt.date, dt.date]] = []
+    index = 0
+    for segment_index in range(bounded_count):
+        size = base_size + (1 if segment_index < remainder else 0)
+        segment_dates = dates[index : index + size]
+        segments.append((segment_dates[0], segment_dates[-1]))
+        index += size
+    return segments
+
+
+def _quartile_summary(values: list[float]) -> tuple[float, float, float] | None:
+    if len(values) < 4:
+        return None
+    try:
+        q1, q2, q3 = quantiles(values, n=4, method="inclusive")
+    except StatisticsError:
+        return None
+    return q1, q2, q3
+
+
+def _segment_mean(
+    observations: list[_MetricObservation],
+    segment_start: dt.date,
+    segment_end: dt.date,
+) -> tuple[int, float | None]:
+    segment_start_str = segment_start.isoformat()
+    segment_end_str = segment_end.isoformat()
+    values = [item.value for item in observations if segment_start_str <= item.date <= segment_end_str]
+    if not values:
+        return 0, None
+    return len(values), mean(values)
+
+
+def _metric_trend_summary(
+    observations: list[_MetricObservation],
+    segments: list[tuple[dt.date, dt.date]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    segment_payload: list[dict[str, Any]] = []
+    segment_stats: list[tuple[int, float | None]] = []
+    for segment_start, segment_end in segments:
+        count, segment_mean_value = _segment_mean(observations, segment_start, segment_end)
+        segment_stats.append((count, segment_mean_value))
+        segment_payload.append(
+            {
+                "start_date": segment_start.isoformat(),
+                "end_date": segment_end.isoformat(),
+                "available_days": count,
+                "mean": _rounded(segment_mean_value),
+            }
+        )
+
+    valid_segments = [(count, value) for count, value in segment_stats if value is not None]
+    if len(valid_segments) < 2:
+        return segment_payload, {
+            "direction": "insufficient_data",
+            "delta": None,
+            "delta_pct": None,
+        }
+
+    first_count, first_mean = valid_segments[0]
+    last_count, last_mean = valid_segments[-1]
+    if first_count < 2 or last_count < 2:
+        return segment_payload, {
+            "direction": "insufficient_data",
+            "delta": None,
+            "delta_pct": None,
+        }
+
+    median_value = median([item.value for item in observations])
+    spread = max(item.value for item in observations) - min(item.value for item in observations)
+    threshold = max(abs(median_value) * 0.01, spread * 0.1, 0.1)
+    delta = last_mean - first_mean
+    if abs(delta) < threshold:
+        direction = "stable"
+    elif delta > 0:
+        direction = "up"
+    else:
+        direction = "down"
+
+    delta_pct = None
+    if abs(first_mean) > 1e-9:
+        delta_pct = (delta / first_mean) * 100
+
+    return segment_payload, {
+        "direction": direction,
+        "delta": _rounded(delta),
+        "delta_pct": _rounded(delta_pct),
+    }
+
+
+def _metric_summary(
+    *,
+    metric_key: str,
+    snapshots: list[dict[str, Any]],
+    segments: list[tuple[dt.date, dt.date]],
+    requested_days: int,
+) -> dict[str, Any] | None:
+    observations, excluded_dates = _metric_observations(snapshots, metric_key)
+    if not observations:
+        return None
+
+    values = [item.value for item in observations]
+    segment_payload, trend_payload = _metric_trend_summary(observations, segments)
+    min_observation = min(observations, key=lambda item: item.value)
+    max_observation = max(observations, key=lambda item: item.value)
+    latest_observation = max(observations, key=lambda item: item.date)
+    earliest_observation = min(observations, key=lambda item: item.date)
+
+    return {
+        "metric_key": metric_key,
+        "unit": _metric_unit_from_snapshots(snapshots, metric_key),
+        "available_days": len(observations),
+        "requested_days": requested_days,
+        "coverage_ratio": _rounded(len(observations) / requested_days) if requested_days > 0 else None,
+        "status_counts": _metric_status_counts(snapshots, metric_key),
+        "excluded_days": len(excluded_dates),
+        "excluded_dates": excluded_dates[:10],
+        "statistics": {
+            "mean": _rounded(mean(values)),
+            "median": _rounded(median(values)),
+            "min": _rounded(min_observation.value),
+            "min_date": min_observation.date,
+            "max": _rounded(max_observation.value),
+            "max_date": max_observation.date,
+            "earliest": _rounded(earliest_observation.value),
+            "earliest_date": earliest_observation.date,
+            "latest": _rounded(latest_observation.value),
+            "latest_date": latest_observation.date,
+        },
+        "trend": trend_payload,
+        "segments": segment_payload,
+    }
+
+
+def _notable_reason_text(metric_key: str, direction: str) -> str:
+    if metric_key == "steps":
+        return "Lower-than-usual step volume." if direction == "low" else "Higher-than-usual step volume."
+    if metric_key == "resting_hr_avg":
+        return "Elevated resting heart rate." if direction == "high" else "Lower-than-usual resting heart rate."
+    if metric_key == "hrv_sdnn_avg":
+        return "Suppressed HRV." if direction == "low" else "Higher-than-usual HRV."
+    if metric_key == "oxygen_saturation_pct":
+        return "Lower-than-usual oxygen saturation." if direction == "low" else "Higher-than-usual oxygen saturation."
+    if metric_key == "respiratory_rate_avg":
+        return "Elevated respiratory rate." if direction == "high" else "Lower-than-usual respiratory rate."
+    if metric_key == "sleep_asleep_minutes":
+        return "Short sleep duration." if direction == "low" else "Long sleep duration."
+    return "Notable deviation."
+
+
+def _notable_days(
+    snapshots: list[dict[str, Any]],
+    metric_summaries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    baselines: dict[str, dict[str, float]] = {}
+    for metric_summary in metric_summaries:
+        metric_key = metric_summary["metric_key"]
+        if metric_key not in _NOTABLE_ANALYSIS_METRIC_KEYS:
+            continue
+        observations, _ = _metric_observations(snapshots, metric_key)
+        quartile_summary = _quartile_summary([item.value for item in observations])
+        if quartile_summary is None:
+            continue
+        q1, q2, q3 = quartile_summary
+        iqr = q3 - q1
+        fallback_scale = max(abs(q2) * 0.05, 1.0)
+        baselines[metric_key] = {
+            "q1": q1,
+            "median": q2,
+            "q3": q3,
+            "scale": iqr if iqr > 0 else fallback_scale,
+        }
+
+    notable_days: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        metrics = snapshot.get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        reasons: list[dict[str, Any]] = []
+        score = 0.0
+        for metric_key, baseline in baselines.items():
+            raw_value = _coerce_numeric(metrics.get(metric_key))
+            if raw_value is None or not _metric_value_is_plausible(snapshot, metric_key, raw_value):
+                continue
+            q1 = baseline["q1"]
+            q3 = baseline["q3"]
+            scale = baseline["scale"]
+            lower = q1 - (1.5 * scale)
+            upper = q3 + (1.5 * scale)
+            if raw_value < lower:
+                severity = (lower - raw_value) / scale
+                reasons.append(
+                    {
+                        "metric_key": metric_key,
+                        "direction": "low",
+                        "value": _rounded(raw_value),
+                        "baseline_median": _rounded(baseline["median"]),
+                        "summary": _notable_reason_text(metric_key, "low"),
+                        "severity": _rounded(severity),
+                    }
+                )
+                score += severity
+            elif raw_value > upper:
+                severity = (raw_value - upper) / scale
+                reasons.append(
+                    {
+                        "metric_key": metric_key,
+                        "direction": "high",
+                        "value": _rounded(raw_value),
+                        "baseline_median": _rounded(baseline["median"]),
+                        "summary": _notable_reason_text(metric_key, "high"),
+                        "severity": _rounded(severity),
+                    }
+                )
+                score += severity
+        if reasons:
+            notable_days.append(
+                {
+                    "date": snapshot.get("date"),
+                    "score": _rounded(score),
+                    "reasons": sorted(reasons, key=lambda item: item["severity"] or 0, reverse=True),
+                }
+            )
+
+    notable_days.sort(key=lambda item: (item["score"] or 0), reverse=True)
+    return notable_days[:7]
+
+
+def _analysis_insights(
+    metric_summaries: list[dict[str, Any]],
+    *,
+    missing_dates: list[str],
+    requested_days: int,
+) -> list[str]:
+    insights: list[str] = []
+    metric_summary_by_key = {item["metric_key"]: item for item in metric_summaries}
+
+    steps_summary = metric_summary_by_key.get("steps")
+    if steps_summary:
+        direction = steps_summary["trend"]["direction"]
+        if direction == "up":
+            insights.append("Step volume trended up in the later segment.")
+        elif direction == "down":
+            insights.append("Step volume trended down in the later segment.")
+
+    resting_hr_summary = metric_summary_by_key.get("resting_hr_avg")
+    hrv_summary = metric_summary_by_key.get("hrv_sdnn_avg")
+    if resting_hr_summary and hrv_summary:
+        resting_direction = resting_hr_summary["trend"]["direction"]
+        hrv_direction = hrv_summary["trend"]["direction"]
+        if resting_direction == "down" and hrv_direction == "up":
+            insights.append("Recovery markers improved in the later segment: resting HR fell while HRV rose.")
+        elif resting_direction == "up" and hrv_direction == "down":
+            insights.append("Recovery markers weakened in the later segment: resting HR rose while HRV fell.")
+        elif resting_direction == "stable" and hrv_direction == "stable":
+            insights.append("Recovery markers were broadly stable across the range.")
+
+    oxygen_summary = metric_summary_by_key.get("oxygen_saturation_pct")
+    if oxygen_summary:
+        oxygen_stats = oxygen_summary["statistics"]
+        oxygen_min = oxygen_stats.get("min")
+        oxygen_max = oxygen_stats.get("max")
+        if isinstance(oxygen_min, (int, float)) and isinstance(oxygen_max, (int, float)) and oxygen_max - oxygen_min <= 2:
+            insights.append("Oxygen saturation stayed relatively stable.")
+
+    vo2_summary = metric_summary_by_key.get("vo2_max")
+    if vo2_summary and vo2_summary["available_days"] < 4:
+        insights.append("VO2 max data is sparse; cardio-fitness trend confidence is low.")
+
+    sleep_summaries = [
+        item
+        for item in metric_summaries
+        if item["metric_key"] in {"sleep_asleep_minutes", "sleep_in_bed_minutes"} and item["excluded_days"] > 0
+    ]
+    if sleep_summaries:
+        insights.append("Sleep metrics contain suspect dates and should be interpreted cautiously.")
+
+    if missing_dates:
+        insights.append(
+            f"{len(missing_dates)} of {requested_days} requested dates are missing from exported daily snapshots."
+        )
+
+    return insights
+
+
+def _analyze_range_impl(
+    *,
+    start_date: str,
+    end_date: str,
+    metric_keys: list[str] | None,
+    segment_count: int,
+    storage_backend: _StorageBackendName,
+) -> dict[str, Any]:
+    start = _parse_ymd(start_date)
+    end = _parse_ymd(end_date)
+    if start > end:
+        _raise("INVALID_ARGUMENTS", "start_date must be <= end_date.")
+    if not (1 <= segment_count <= 12):
+        _raise("INVALID_ARGUMENTS", "segment_count must be between 1 and 12.")
+
+    range_payload = _read_range_metrics_impl(
+        start_date=start_date,
+        end_date=end_date,
+        storage_backend=storage_backend,
+    )
+    snapshots = range_payload["data"]
+    missing_dates = range_payload["missing_dates"]
+    requested_days = (end - start).days + 1
+    segments = _segment_ranges(start, end, segment_count)
+
+    requested_metric_keys = _normalize_type_keys(metric_keys) if metric_keys else list(_DEFAULT_ANALYSIS_METRIC_KEYS)
+    metric_summaries: list[dict[str, Any]] = []
+    for metric_key in requested_metric_keys:
+        summary = _metric_summary(
+            metric_key=metric_key,
+            snapshots=snapshots,
+            segments=segments,
+            requested_days=requested_days,
+        )
+        if summary is not None:
+            metric_summaries.append(summary)
+
+    collectors = sorted(
+        {
+            collector.get("collector_id")
+            for snapshot in snapshots
+            for collector in [snapshot.get("collector")]
+            if isinstance(collector, dict) and isinstance(collector.get("collector_id"), str)
+        }
+    )
+    device_ids = sorted(
+        {
+            collector.get("device_id")
+            for snapshot in snapshots
+            for collector in [snapshot.get("collector")]
+            if isinstance(collector, dict) and isinstance(collector.get("device_id"), str)
+        }
+    )
+    commit_ids = sorted(
+        {
+            commit_id
+            for snapshot in snapshots
+            for commit_id in [snapshot.get("commit_id")]
+            if isinstance(commit_id, str)
+        }
+    )
+
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "storage_backend": range_payload["storage_backend"],
+        "read_strategy": {
+            "uses_month_indexes_only": True,
+            "raw_samples_read": False,
+        },
+        "days_requested": requested_days,
+        "days_available": len(snapshots),
+        "missing_dates": missing_dates,
+        "collector_ids": collectors,
+        "device_ids": device_ids,
+        "latest_commit_id": commit_ids[-1] if commit_ids else None,
+        "segment_count": len(segments),
+        "metrics": metric_summaries,
+        "notable_days": _notable_days(snapshots, metric_summaries),
+        "insights": _analysis_insights(
+            metric_summaries,
+            missing_dates=missing_dates,
+            requested_days=requested_days,
+        ),
+    }
+
+
+@health_router.tool(
+    name="health.read_daily_metrics",
+    description="Read one day's exported Health metrics snapshot from an S3-compatible object store.",
+)
+def read_daily_metrics(
+    date: Annotated[str, Field(description="Date (YYYY-MM-DD).")],
+    storage_backend: Annotated[
+        Literal["auto", "s3_object_store"],
+        Field(description="Storage backend to read from."),
+    ] = "auto",
+) -> dict[str, Any]:
+    day = _parse_ymd(date)
+    backend = _resolve_storage_backend(storage_backend)
+
+    try:
+        snapshot = _read_daily_snapshot(day, backend)
+    except _DataNotFound:
+        _raise("DATA_NOT_FOUND", f"No daily metrics found for {date}.")
+
+    return _public_daily_snapshot(snapshot, backend.backend)
+
+
+@health_router.tool(
+    name="health.read_range_metrics",
+    description="Read a date range of exported daily metrics using monthly indexes. Missing dates are reported, not treated as an error.",
+)
+def read_range_metrics(
+    start_date: Annotated[str, Field(description="Start date (YYYY-MM-DD).")],
+    end_date: Annotated[str, Field(description="End date (YYYY-MM-DD), inclusive.")],
+    storage_backend: Annotated[
+        Literal["auto", "s3_object_store"],
+        Field(description="Storage backend to read from."),
+    ] = "auto",
+) -> dict[str, Any]:
+    return _read_range_metrics_impl(
+        start_date=start_date,
+        end_date=end_date,
+        storage_backend=storage_backend,
+    )
+
+
+@health_router.tool(
+    name="health.analyze_range",
+    description="Analyze a Health date range using exported daily snapshots only. Returns metric summaries, segment trends, notable days, and brief insights without reading raw samples.",
+)
+def analyze_range(
+    start_date: Annotated[str, Field(description="Start date (YYYY-MM-DD).")],
+    end_date: Annotated[str, Field(description="End date (YYYY-MM-DD), inclusive.")],
+    metric_keys: Annotated[
+        list[str] | None,
+        Field(description="Optional daily metric keys to analyze. Defaults to all known daily metrics with available data."),
+    ] = None,
+    segment_count: Annotated[
+        int,
+        Field(description="How many contiguous segments to split the requested range into for trend comparison.", ge=1, le=12),
+    ] = 3,
+    storage_backend: Annotated[
+        Literal["auto", "s3_object_store"],
+        Field(description="Storage backend to read from."),
+    ] = "auto",
+) -> dict[str, Any]:
+    return _analyze_range_impl(
+        start_date=start_date,
+        end_date=end_date,
+        metric_keys=metric_keys,
+        segment_count=segment_count,
+        storage_backend=storage_backend,
+    )
+
+
 @health_router.tool(
     name="health.list_sample_catalog",
     description="List known Health raw sample types, kinds, tags, and how they relate to daily metrics.",
@@ -1595,7 +2087,7 @@ def read_samples(
         Field(description="Include filtered manifest views alongside sample payloads."),
     ] = True,
     storage_backend: Annotated[
-        Literal["auto", "icloud_drive", "s3_object_store"],
+        Literal["auto", "s3_object_store"],
         Field(description="Storage backend to read from."),
     ] = "auto",
 ) -> dict[str, Any]:
@@ -1649,7 +2141,7 @@ def read_daily_raw(
         Field(description="Include the filtered manifest view in the response."),
     ] = True,
     storage_backend: Annotated[
-        Literal["auto", "icloud_drive", "s3_object_store"],
+        Literal["auto", "s3_object_store"],
         Field(description="Storage backend to read from."),
     ] = "auto",
 ) -> dict[str, Any]:
@@ -1695,7 +2187,7 @@ def inspect_day(
         Field(description="Optional raw type keys to focus the inspection on."),
     ] = None,
     storage_backend: Annotated[
-        Literal["auto", "icloud_drive", "s3_object_store"],
+        Literal["auto", "s3_object_store"],
         Field(description="Storage backend to read from."),
     ] = "auto",
 ) -> dict[str, Any]:
@@ -1725,7 +2217,7 @@ def list_changes(
         Field(description="When true, enrich each changed date with raw type status/record_count/relpath from its manifest."),
     ] = True,
     storage_backend: Annotated[
-        Literal["auto", "icloud_drive", "s3_object_store"],
+        Literal["auto", "s3_object_store"],
         Field(description="Storage backend to read from."),
     ] = "auto",
 ) -> dict[str, Any]:

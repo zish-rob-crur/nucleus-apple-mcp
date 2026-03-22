@@ -1,4 +1,5 @@
 import Foundation
+import BackgroundTasks
 
 extension Notification.Name {
     static let nucleusHealthObserverDidFire = Notification.Name("nucleus.health.observer.did_fire")
@@ -108,6 +109,50 @@ struct HealthAnchorDiagnostics: Equatable {
         trackedSampleCount: 0,
         unprimedTypeKeys: []
     )
+}
+
+struct PendingBackgroundSyncRequest: Codable, Equatable, Sendable {
+    let queuedAt: Date
+    let typeKeys: [String]
+}
+
+enum PendingBackgroundSyncStore {
+    private static let defaultsKey = "nucleus.pending_background_sync_request"
+
+    static func load() -> PendingBackgroundSyncRequest? {
+        guard
+            let data = UserDefaults.standard.data(forKey: defaultsKey),
+            let request = try? JSONDecoder().decode(PendingBackgroundSyncRequest.self, from: data)
+        else {
+            return nil
+        }
+        return request
+    }
+
+    static func save(typeKeys: [String], queuedAt: Date = Date()) {
+        let request = PendingBackgroundSyncRequest(
+            queuedAt: queuedAt,
+            typeKeys: Array(Set(typeKeys)).sorted()
+        )
+        guard let data = try? JSONEncoder().encode(request) else { return }
+        UserDefaults.standard.set(data, forKey: defaultsKey)
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: defaultsKey)
+    }
+}
+
+enum NucleusBackgroundRefresh {
+    static let identifier = "com.zhiwenwang.nucleus.refresh"
+    private static let minimumDelay: TimeInterval = 15 * 60
+
+    static func schedule(after delay: TimeInterval = minimumDelay) throws {
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
+        let request = BGAppRefreshTaskRequest(identifier: identifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: max(delay, minimumDelay))
+        try BGTaskScheduler.shared.submit(request)
+    }
 }
 
 actor HealthAnchorStore {

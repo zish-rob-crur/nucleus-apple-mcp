@@ -4,7 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
+        ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
 
@@ -31,12 +31,34 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
 
                 NavigationLink {
+                    PrivacyPolicyView()
+                } label: {
+                    settingsCard(
+                        title: "Privacy Policy",
+                        subtitle: "How Health data is read, stored, and optionally uploaded",
+                        systemImage: "hand.raised.fill"
+                    )
+                }
+                .buttonStyle(.plain)
+
+                NavigationLink {
                     DiagnosticsView()
                 } label: {
                     settingsCard(
                         title: "Diagnostics",
                         subtitle: diagnosticsSubtitle,
                         systemImage: "stethoscope"
+                    )
+                }
+                .buttonStyle(.plain)
+
+                NavigationLink {
+                    SyncSettingsView()
+                } label: {
+                    settingsCard(
+                        title: "Sync",
+                        subtitle: syncSubtitle,
+                        systemImage: "arrow.triangle.2.circlepath"
                     )
                 }
                 .buttonStyle(.plain)
@@ -49,6 +71,7 @@ struct SettingsView: View {
             .padding(.bottom, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.hidden)
         .background(NucleusBackground())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -100,9 +123,9 @@ private extension SettingsView {
     var storageSubtitle: String {
         switch model.storageStatus?.backend {
         case .icloudDrive:
-            "iCloud Drive (Documents)"
+            "Stored privately"
         case .localDocuments:
-            "Local Documents (no iCloud)"
+            "Stored privately"
         case nil:
             "Storage unavailable"
         }
@@ -120,12 +143,22 @@ private extension SettingsView {
         return model.logs.isEmpty ? "No logs yet" : "\(model.logs.count) log lines"
     }
 
+    var syncSubtitle: String {
+        if model.isSyncing {
+            return model.syncProgress?.detail ?? "Sync in progress"
+        }
+        if model.needsInitialSyncRangeSelection {
+            return "Choose first import range"
+        }
+        return "Backfill history and tune fallback window"
+    }
+
     var storageChipLabel: String {
         switch model.storageStatus?.backend {
         case .icloudDrive:
-            "iCloud"
+            "Private"
         case .localDocuments:
-            "Local"
+            "Private"
         case nil:
             "Unknown"
         }
@@ -134,7 +167,7 @@ private extension SettingsView {
     var storageChipIcon: String {
         switch model.storageStatus?.backend {
         case .icloudDrive:
-            "icloud"
+            "folder.fill"
         case .localDocuments:
             "folder.fill"
         case nil:
@@ -145,7 +178,7 @@ private extension SettingsView {
     var storageChipKind: StatusPill.Kind {
         switch model.storageStatus?.backend {
         case .icloudDrive: .ok
-        case .localDocuments: .warning
+        case .localDocuments: .ok
         case nil: .error
         }
     }
@@ -168,7 +201,7 @@ private extension SettingsView {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: "hand.raised.fill")
                 .foregroundStyle(Color.secondary.opacity(0.85))
-            Text("Credentials are stored in Keychain on this device and are not synced via iCloud.")
+            Text("Credentials are stored in Keychain.")
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(Color.secondary)
         }

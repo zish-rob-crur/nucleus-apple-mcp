@@ -3,16 +3,23 @@ import UIKit
 
 struct SyncView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var selectedTab: RootTab
 
+    @State private var showExportDetails = false
+
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
                 header
 
-                controlsCard
-                outputsCard
-                telemetryCard
+                if let progress = model.syncProgress {
+                    progressCard(progress)
+                }
+
+                planCard
+                recentExportCard
+                highlightsCard
 
                 footer
                     .padding(.top, 8)
@@ -22,13 +29,10 @@ struct SyncView: View {
             .padding(.bottom, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.hidden)
         .background(NucleusBackground())
         .navigationTitle("Sync")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await model.refreshAuthStatus()
-            await model.refreshAnchorDiagnostics()
-        }
     }
 }
 
@@ -41,57 +45,152 @@ struct SyncView: View {
 
 private extension SyncView {
     var header: some View {
-        NucleusCard("Sync", systemImage: "arrow.triangle.2.circlepath") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Run incremental sync. Nucleus re-exports only the dates touched by HealthKit changes, then optionally uploads them to your S3-compatible object store.")
-                    .font(.system(.subheadline, design: .rounded))
-                    .foregroundStyle(Color.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        let cornerRadius: CGFloat = 28
+        let accentOpacity: Double = colorScheme == .dark ? 0.14 : 0.05
 
-                HStack(spacing: 10) {
-                    StatusPill(label: model.anchorDiagnostics.modeLabel, kind: model.anchorDiagnostics.unprimedTypeKeys.isEmpty ? .ok : .warning, systemImage: "bolt.badge.clock")
-                    StatusPill(label: model.backgroundDeliveryStatus.label, kind: backgroundDeliveryKind, systemImage: "waveform.badge.magnifyingglass")
-                    StatusPill(label: backendLabel, kind: backendKind, systemImage: backendIcon)
-                    StatusPill(label: objectStoreLabel, kind: objectStoreKind, systemImage: objectStoreIcon)
-                }
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("Sync")
+                .font(.system(.largeTitle, design: .serif, weight: .semibold))
+                .foregroundStyle(.primary)
+                .tracking(-0.6)
+
+            Text("Keep your export current. Nucleus rewrites only the dates touched by HealthKit changes and can surface progress beyond the app while a sync is active.")
+                .font(.system(.subheadline, design: .rounded))
+                .foregroundStyle(Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            headerSummary
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background {
+            NucleusCardBackground(cornerRadius: cornerRadius)
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    NucleusPalette.accent.opacity(accentOpacity),
+                                    .clear,
+                                ],
+                                center: .topTrailing,
+                                startRadius: 12,
+                                endRadius: 420
+                            )
+                        )
+                        .blendMode(colorScheme == .dark ? .plusLighter : .screen)
+                )
+        }
+        .overlay(alignment: .topTrailing) {
+            if model.orbState != .idle {
+                NucleusOrb(state: model.orbState, size: 68)
+                    .padding(.top, 16)
+                    .padding(.trailing, 16)
             }
         }
     }
 
-    var controlsCard: some View {
-        NucleusCard("Controls", systemImage: "slider.horizontal.3") {
+    var headerSummary: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                summaryFact(title: "Capture", value: syncModeLabel, systemImage: "bolt.badge.clock", kind: syncModeKind)
+                summaryFact(title: "Background", value: backgroundDeliveryLabel, systemImage: "waveform.badge.magnifyingglass", kind: backgroundDeliveryKind)
+                summaryFact(title: "Storage", value: backendLabel, systemImage: backendIcon, kind: backendKind)
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(minimum: 120), spacing: 12, alignment: .leading),
+                    GridItem(.flexible(minimum: 120), spacing: 12, alignment: .leading),
+                ],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                summaryFact(title: "Capture", value: syncModeLabel, systemImage: "bolt.badge.clock", kind: syncModeKind)
+                summaryFact(title: "Background", value: backgroundDeliveryLabel, systemImage: "waveform.badge.magnifyingglass", kind: backgroundDeliveryKind)
+                summaryFact(title: "Storage", value: backendLabel, systemImage: backendIcon, kind: backendKind)
+            }
+        }
+    }
+
+    func progressCard(_ progress: SyncProgress) -> some View {
+        NucleusCard("Now", systemImage: "waveform.path.ecg") {
+            VStack(alignment: .leading, spacing: 12) {
+                SyncProgressPanel(progress: progress)
+
+                Text(progress.supportingNote)
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    var planCard: some View {
+        NucleusCard("Plan", systemImage: "calendar.badge.clock") {
             VStack(alignment: .leading, spacing: 12) {
                 NucleusInset {
-                    Stepper(value: Binding(
-                        get: { model.catchUpDays },
-                        set: { model.setCatchUpDays($0) }
-                    ), in: 1...14) {
-                        HStack {
-                            Text("Bootstrap / fallback window")
-                                .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                                .foregroundStyle(.primary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Fallback window")
+                                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                                    .foregroundStyle(.primary)
+
+                                Text("Used after the first sync when HealthKit reports deletions without enough local context.")
+                                    .font(.system(.footnote, design: .rounded))
+                                    .foregroundStyle(Color.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
                             Spacer(minLength: 0)
+
                             Text("\(model.catchUpDays)d")
                                 .font(.system(.subheadline, design: .monospaced).weight(.semibold))
+                                .foregroundStyle(NucleusPalette.accentForeground(colorScheme))
+                        }
+
+                        Stepper(
+                            value: Binding(
+                                get: { model.catchUpDays },
+                                set: { model.setCatchUpDays($0) }
+                            ),
+                            in: 1...14
+                        ) {
+                            Text("Adjust window")
+                                .font(.system(.footnote, design: .rounded).weight(.medium))
                                 .foregroundStyle(Color.secondary)
                         }
                     }
                 }
 
-                Text("Used for the first sync and when HealthKit reports deletions without enough local context.")
-                    .font(.system(.footnote, design: .rounded))
-                    .foregroundStyle(Color.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if model.needsInitialSyncRangeSelection {
+                    NucleusInset {
+                        Text("The first sync will ask how much history to import before it starts.")
+                            .font(.system(.footnote, design: .rounded))
+                            .foregroundStyle(Color.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
 
                 Button {
-                    model.syncNow(catchUpDays: model.catchUpDays)
+                    model.beginManualSync()
                 } label: {
-                    Label(model.isSyncing ? "Syncing…" : "Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                    Label(model.manualSyncButtonTitle, systemImage: "arrow.triangle.2.circlepath")
                         .labelStyle(.titleAndIcon)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(NucleusButtonStyle(kind: .primary))
-                .disabled(model.isSyncing)
+                .disabled(model.isSyncing || model.isBootstrapping)
+
+                Button {
+                    selectedTab = .settings
+                } label: {
+                    Label("Configure Storage & Uploads", systemImage: "shippingbox")
+                        .labelStyle(.titleAndIcon)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(NucleusButtonStyle(kind: .ghost))
 
                 if model.objectStoreSettings.enabled, model.resolvedObjectStoreConfig() == nil {
                     NucleusWarningCallout(message: "Object store is enabled but incomplete. Finish setup in Settings.")
@@ -107,46 +206,46 @@ private extension SyncView {
         }
     }
 
-    var outputsCard: some View {
-        NucleusCard("Outputs", systemImage: "doc.text") {
+    var recentExportCard: some View {
+        let snapshot = model.activitySnapshot
+
+        return NucleusCard("Recent Export", systemImage: "clock.badge.checkmark") {
             VStack(alignment: .leading, spacing: 12) {
-                if let written = model.lastWritten {
+                Text(snapshot.title)
+                    .font(.system(.title3, design: .serif, weight: .semibold))
+                    .foregroundStyle(activityTitleColor(snapshot.phase))
+
+                Text(snapshot.detail)
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let revision = model.latestRevision {
                     HStack(spacing: 10) {
-                        Text(written.revisionId)
-                            .font(.system(.caption, design: .monospaced).weight(.semibold))
-                            .foregroundStyle(NucleusPalette.accent)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                        Text(revision.date)
+                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                            .foregroundStyle(.primary)
 
                         Spacer(minLength: 0)
 
-                        StatusPill(label: "snapshot", kind: .neutral)
+                        Text(compactTimezone(revision.day.timezone))
+                            .font(.system(.caption, design: .rounded).weight(.medium))
+                            .foregroundStyle(Color.secondary)
                     }
+                }
 
-                    NucleusInset {
-                        VStack(alignment: .leading, spacing: 10) {
-                            fileLine(
-                                title: "Summary",
-                                fileName: written.dailyURL.lastPathComponent,
-                                pathToCopy: written.dailyURL.path(percentEncoded: false)
-                            )
+                Text(snapshot.metaLine)
+                    .font(.system(.footnote, design: .rounded).weight(.medium))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                            fileLine(
-                                title: "Month",
-                                fileName: written.monthURL.lastPathComponent,
-                                pathToCopy: written.monthURL.path(percentEncoded: false)
-                            )
+                if let shortRevision = snapshot.shortRevision {
+                    Text("Revision \(shortRevision)")
+                        .font(.system(.caption, design: .monospaced).weight(.semibold))
+                        .foregroundStyle(NucleusPalette.accentForeground(colorScheme))
+                }
 
-                            if let rawWritten = model.lastRawWritten {
-                                fileLine(
-                                    title: "Raw",
-                                    fileName: rawWritten.manifestURL.lastPathComponent,
-                                    pathToCopy: rawWritten.manifestURL.path(percentEncoded: false)
-                                )
-                            }
-                        }
-                    }
-
+                if let written = model.lastWritten {
                     HStack(spacing: 10) {
                         ShareLink(item: written.dailyURL) {
                             Label("Share Summary", systemImage: "square.and.arrow.up")
@@ -155,82 +254,94 @@ private extension SyncView {
                         }
                         .buttonStyle(NucleusButtonStyle(kind: .secondary))
 
-                        ShareLink(item: written.monthURL) {
-                            Label("Share Month Index", systemImage: "link")
+                        Button {
+                            selectedTab = .overview
+                        } label: {
+                            Label("Home", systemImage: "house")
                                 .labelStyle(.titleAndIcon)
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(NucleusButtonStyle(kind: .ghost))
                     }
 
-                    if let rawWritten = model.lastRawWritten {
-                        HStack(spacing: 10) {
-                            ShareLink(item: rawWritten.manifestURL) {
-                                Label("Share Raw Manifest", systemImage: "doc.plaintext")
-                                    .labelStyle(.titleAndIcon)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(NucleusButtonStyle(kind: .secondary))
+                    NucleusInset {
+                        DisclosureGroup(isExpanded: $showExportDetails) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                fileLine(
+                                    title: "Summary",
+                                    fileName: written.dailyURL.lastPathComponent,
+                                    pathToCopy: written.dailyURL.path(percentEncoded: false)
+                                )
 
-                            if let firstSampleURL = rawWritten.sampleURLs.first {
-                                ShareLink(item: firstSampleURL) {
-                                    Label("Share First Raw File", systemImage: "doc.text")
-                                        .labelStyle(.titleAndIcon)
-                                        .frame(maxWidth: .infinity)
+                                fileLine(
+                                    title: "Month",
+                                    fileName: written.monthURL.lastPathComponent,
+                                    pathToCopy: written.monthURL.path(percentEncoded: false)
+                                )
+
+                                if let rawWritten = model.lastRawWritten {
+                                    fileLine(
+                                        title: "Raw",
+                                        fileName: rawWritten.manifestURL.lastPathComponent,
+                                        pathToCopy: rawWritten.manifestURL.path(percentEncoded: false)
+                                    )
                                 }
-                                .buttonStyle(NucleusButtonStyle(kind: .ghost))
-                            } else {
-                                Color.clear
-                                    .frame(maxWidth: .infinity, minHeight: 1)
+
+                                HStack(spacing: 10) {
+                                    ShareLink(item: written.monthURL) {
+                                        Label("Share Month Index", systemImage: "calendar")
+                                            .labelStyle(.titleAndIcon)
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(NucleusButtonStyle(kind: .ghost))
+
+                                    if let rawWritten = model.lastRawWritten {
+                                        ShareLink(item: rawWritten.manifestURL) {
+                                            Label("Share Raw Manifest", systemImage: "doc.plaintext")
+                                                .labelStyle(.titleAndIcon)
+                                                .frame(maxWidth: .infinity)
+                                        }
+                                        .buttonStyle(NucleusButtonStyle(kind: .ghost))
+                                    }
+                                }
                             }
+                            .padding(.top, 8)
+                        } label: {
+                            Text("Export file details")
+                                .font(.system(.footnote, design: .rounded).weight(.semibold))
+                                .foregroundStyle(.primary)
                         }
+                        .tint(.primary)
                     }
                 } else {
-                    Text("Nothing exported yet.")
-                        .font(.system(.subheadline, design: .rounded))
+                    Text("Run the first sync to create a recent export.")
+                        .font(.system(.footnote, design: .rounded))
                         .foregroundStyle(Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
     }
 
-    var telemetryCard: some View {
-        NucleusCard("Telemetry", systemImage: "waveform.path.ecg") {
+    var highlightsCard: some View {
+        NucleusCard("Highlights", systemImage: "heart.text.square") {
             VStack(alignment: .leading, spacing: 12) {
                 if let revision = model.latestRevision {
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(revision.date)
-                                .font(.system(.title3, design: .rounded).weight(.semibold))
-                                .foregroundStyle(.primary)
-                            Text(compactTimezone(revision.day.timezone))
-                                .font(.system(.caption, design: .rounded).weight(.semibold))
-                                .foregroundStyle(Color.secondary)
-                        }
-                        Spacer(minLength: 0)
-                        StatusPill(label: compactTimezone(revision.day.timezone), kind: .neutral, systemImage: "globe")
-                    }
-
-                    let keys: [MetricKey] = [
-                        .steps,
-                        .activeEnergyKcal,
-                        .exerciseMinutes,
-                        .standHours,
-                        .restingHrAvg,
-                        .hrvSdnnAvg,
-                        .sleepAsleepMinutes,
-                        .sleepInBedMinutes,
-                    ]
+                    Text("From the last synced day, so you can confirm the export still feels current.")
+                        .font(.system(.subheadline, design: .rounded))
+                        .foregroundStyle(Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        ForEach(keys) { key in
+                        ForEach(highlightMetricKeys) { key in
                             MetricTile(key: key, result: metricResult(key, revision: revision))
                         }
                     }
                 } else {
-                    Text("Run Sync Now to see metrics.")
+                    Text("Once a sync completes, this area surfaces a few recent health highlights instead of raw export files.")
                         .font(.system(.subheadline, design: .rounded))
                         .foregroundStyle(Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -240,19 +351,28 @@ private extension SyncView {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: "shield.lefthalf.filled")
                 .foregroundStyle(Color.secondary.opacity(0.85))
-            Text("Uploads run best-effort. If you need reliability, re-run sync or build a retry queue.")
+            Text("Sync runs locally. Upload stays optional, and background delivery keeps incremental syncs lightweight.")
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(Color.secondary)
         }
         .opacity(0.92)
     }
 
+    var highlightMetricKeys: [MetricKey] {
+        [
+            .steps,
+            .exerciseMinutes,
+            .sleepAsleepMinutes,
+            .restingHrAvg,
+        ]
+    }
+
     var backendLabel: String {
         switch model.storageStatus?.backend {
         case .icloudDrive:
-            "iCloud"
+            "Private"
         case .localDocuments:
-            "Local"
+            "Private"
         case nil:
             "Unknown"
         }
@@ -261,7 +381,7 @@ private extension SyncView {
     var backendIcon: String {
         switch model.storageStatus?.backend {
         case .icloudDrive:
-            "icloud"
+            "folder.fill"
         case .localDocuments:
             "folder.fill"
         case nil:
@@ -271,9 +391,23 @@ private extension SyncView {
 
     var backendKind: StatusPill.Kind {
         switch model.storageStatus?.backend {
-        case .icloudDrive: .ok
-        case .localDocuments: .warning
-        case nil: .error
+        case .icloudDrive, .localDocuments:
+            .neutral
+        case nil:
+            .error
+        }
+    }
+
+    var backgroundDeliveryLabel: String {
+        switch model.backgroundDeliveryStatus {
+        case .idle:
+            "Waiting"
+        case .needsAuthorization:
+            "Needs access"
+        case .ready:
+            "Background on"
+        case .error:
+            "Delivery issue"
         }
     }
 
@@ -290,17 +424,24 @@ private extension SyncView {
         }
     }
 
-    var objectStoreLabel: String {
-        model.objectStoreSettings.enabled ? "S3 On" : "S3 Off"
-    }
-
-    var objectStoreIcon: String {
-        model.objectStoreSettings.enabled ? "shippingbox.fill" : "shippingbox"
-    }
-
     var objectStoreKind: StatusPill.Kind {
         if !model.objectStoreSettings.enabled { return .neutral }
-        return model.resolvedObjectStoreConfig() != nil ? .ok : .warning
+        return model.resolvedObjectStoreConfig() != nil ? .neutral : .warning
+    }
+
+    var syncModeLabel: String {
+        switch model.anchorDiagnostics.modeLabel {
+        case "bootstrap":
+            "First export"
+        case "partial":
+            "Backfill"
+        default:
+            "Incremental"
+        }
+    }
+
+    var syncModeKind: StatusPill.Kind {
+        model.anchorDiagnostics.unprimedTypeKeys.isEmpty ? .ok : .warning
     }
 
     func metricResult(_ key: MetricKey, revision: DailyRevision) -> MetricResult {
@@ -313,6 +454,51 @@ private extension SyncView {
     func compactTimezone(_ identifier: String) -> String {
         let last = identifier.split(separator: "/").last.map(String.init) ?? identifier
         return last.replacingOccurrences(of: "_", with: " ")
+    }
+
+    @ViewBuilder
+    func summaryFact(title: String, value: String, systemImage: String, kind: StatusPill.Kind) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: systemImage)
+                .font(.system(.caption2, design: .rounded).weight(.semibold))
+                .foregroundStyle(Color.secondary)
+                .labelStyle(.titleAndIcon)
+
+            Text(value)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                .foregroundStyle(summaryForeground(kind))
+                .lineLimit(1)
+                .minimumScaleFactor(0.84)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    func summaryForeground(_ kind: StatusPill.Kind) -> Color {
+        switch kind {
+        case .ok:
+            NucleusPalette.accentForeground(colorScheme)
+        case .neutral:
+            Color.primary.opacity(0.84)
+        case .warning:
+            NucleusPalette.warning
+        case .error:
+            NucleusPalette.danger
+        }
+    }
+
+    func activityTitleColor(_ phase: NucleusActivityPhase) -> Color {
+        switch phase {
+        case .ready:
+            .primary
+        case .syncing:
+            NucleusPalette.accentForeground(colorScheme)
+        case .needsAuthorization:
+            NucleusPalette.warning
+        case .setup:
+            .primary
+        case .error:
+            NucleusPalette.danger
+        }
     }
 
     @ViewBuilder
@@ -341,6 +527,7 @@ private extension SyncView {
 private struct MetricTile: View {
     let key: MetricKey
     let result: MetricResult
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -350,7 +537,7 @@ private struct MetricTile: View {
                         .fill(tint.opacity(0.14))
 
                     Circle()
-                        .stroke(tint.opacity(0.22), lineWidth: 1)
+                        .stroke(tint.opacity(0.18), lineWidth: 1)
 
                     Image(systemName: key.systemImage)
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -370,7 +557,7 @@ private struct MetricTile: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(valueText)
-                    .font(.system(size: 24, weight: .semibold, design: .rounded))
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .foregroundStyle(valueColor)
                     .contentTransition(.numericText())
                     .lineLimit(1)
@@ -397,13 +584,13 @@ private struct MetricTile: View {
     private var statusLabel: String {
         switch result.status {
         case .ok:
-            "OK"
+            "Ready"
         case .no_data:
-            "NO DATA"
+            "No data"
         case .unauthorized:
-            "NO AUTH"
+            "Access"
         case .unsupported:
-            "UNSUP"
+            "Unsupported"
         }
     }
 
@@ -439,7 +626,7 @@ private struct MetricTile: View {
     private var valueColor: Color {
         switch result.status {
         case .ok:
-            NucleusPalette.accent
+            NucleusPalette.accentForeground(colorScheme)
         case .no_data:
             Color.secondary
         case .unauthorized:

@@ -1,0 +1,127 @@
+import SwiftUI
+
+struct SyncSettingsView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                fallbackCard
+                backfillCard
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollIndicators(.hidden)
+        .background(NucleusBackground())
+        .navigationTitle("Sync Settings")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+#Preview {
+    NavigationStack {
+        SyncSettingsView()
+            .environmentObject(AppModel())
+    }
+}
+
+private extension SyncSettingsView {
+    var header: some View {
+        NucleusCard("Sync", systemImage: "arrow.triangle.2.circlepath") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Tune incremental fallback behavior and manually re-run a longer history backfill whenever you want older data re-exported.")
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    StatusPill(label: model.anchorDiagnostics.modeLabel, kind: model.anchorDiagnostics.unprimedTypeKeys.isEmpty ? .ok : .warning, systemImage: "bolt.badge.clock")
+                    StatusPill(label: model.syncProgress?.phaseLabel ?? "idle", kind: model.isSyncing ? .neutral : .ok, systemImage: model.syncProgress?.phaseIcon ?? "checkmark.circle")
+                }
+            }
+        }
+    }
+
+    var fallbackCard: some View {
+        NucleusCard("Fallback Window", systemImage: "calendar.badge.exclamationmark") {
+            VStack(alignment: .leading, spacing: 12) {
+                NucleusInset {
+                    Stepper(value: Binding(
+                        get: { model.catchUpDays },
+                        set: { model.setCatchUpDays($0) }
+                    ), in: 1...14) {
+                        HStack {
+                            Text("Incremental fallback window")
+                                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 0)
+                            Text("\(model.catchUpDays)d")
+                                .font(.system(.subheadline, design: .monospaced).weight(.semibold))
+                                .foregroundStyle(Color.secondary)
+                        }
+                    }
+                }
+
+                Text("This window is used after the first sync when HealthKit reports deletions without enough local context.")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if model.needsInitialSyncRangeSelection {
+                    Button {
+                        model.openInitialSyncRangePicker()
+                    } label: {
+                        Label("Choose First Sync Range", systemImage: "clock.badge")
+                            .labelStyle(.titleAndIcon)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(NucleusButtonStyle(kind: .secondary))
+                    .disabled(model.isSyncing)
+                }
+            }
+        }
+    }
+
+    var backfillCard: some View {
+        NucleusCard("History Backfill", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Re-run a longer sync window to import older history again. This is safe to repeat and will rewrite affected daily snapshots.")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(InitialSyncRangeOption.allCases) { option in
+                    Button {
+                        model.runHistoryBackfill(option: option)
+                    } label: {
+                        NucleusInset {
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(option.title)
+                                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                    Text(option.subtitle)
+                                        .font(.system(.footnote, design: .rounded))
+                                        .foregroundStyle(Color.secondary)
+                                }
+
+                                Spacer(minLength: 0)
+
+                                Text("\(option.days)d")
+                                    .font(.system(.subheadline, design: .monospaced).weight(.semibold))
+                                    .foregroundStyle(NucleusPalette.accentForeground(colorScheme))
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(model.isSyncing)
+                }
+            }
+        }
+    }
+}

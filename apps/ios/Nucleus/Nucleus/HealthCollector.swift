@@ -62,7 +62,7 @@ final class HealthCollector: @unchecked Sendable {
     func authorizationRequestStatus() async -> HKAuthorizationRequestStatus {
         guard HKHealthStore.isHealthDataAvailable() else { return .unknown }
 
-        let readTypes = Self.readTypes
+        let readTypes = Self.authorizationReadTypes
         return await withCheckedContinuation { continuation in
             store.getRequestStatusForAuthorization(toShare: [], read: readTypes) { status, _ in
                 continuation.resume(returning: status)
@@ -72,7 +72,7 @@ final class HealthCollector: @unchecked Sendable {
 
     func requestAuthorization() async throws {
         guard HKHealthStore.isHealthDataAvailable() else { throw HealthCollectorError.healthDataUnavailable }
-        try await store.requestAuthorization(toShare: [], read: Self.readTypes)
+        try await store.requestAuthorization(toShare: [], read: Self.authorizationReadTypes)
     }
 
     func ensureObserverQueriesRunning() {
@@ -629,7 +629,34 @@ final class HealthCollector: @unchecked Sendable {
         )
     }
 
-    private static var readTypes: Set<HKObjectType> {
+    func prepareBackfillSyncPlan(
+        days: Int,
+        timeZone: TimeZone,
+        anchorStore: HealthAnchorStore,
+        now: Date = Date()
+    ) async -> IncrementalSyncPlan {
+        var state = await anchorStore.loadState()
+        state.updatedAt = ISO8601.utcString(now)
+
+        let affectedDates = DateFormatting.recentYMDStrings(
+            endingAt: now,
+            days: days,
+            timeZone: timeZone
+        )
+
+        let changedTypeKeysByDate = Dictionary(
+            uniqueKeysWithValues: affectedDates.map { ($0, Self.incrementalTypeKeys) }
+        )
+
+        return IncrementalSyncPlan(
+            affectedDates: affectedDates,
+            changedTypeKeysByDate: changedTypeKeysByDate,
+            proposedState: state,
+            stats: AnchoredSyncStats()
+        )
+    }
+
+    private static var authorizationReadTypes: Set<HKObjectType> {
         var types: Set<HKObjectType> = []
         if let steps = HKObjectType.quantityType(forIdentifier: .stepCount) { types.insert(steps) }
         if let activeEnergy = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned) { types.insert(activeEnergy) }
@@ -647,7 +674,6 @@ final class HealthCollector: @unchecked Sendable {
         if let basalTemp = HKObjectType.quantityType(forIdentifier: .basalBodyTemperature) { types.insert(basalTemp) }
         if let systolic = HKObjectType.quantityType(forIdentifier: .bloodPressureSystolic) { types.insert(systolic) }
         if let diastolic = HKObjectType.quantityType(forIdentifier: .bloodPressureDiastolic) { types.insert(diastolic) }
-        if let bloodPressure = HKObjectType.correlationType(forIdentifier: .bloodPressure) { types.insert(bloodPressure) }
         if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.insert(sleep) }
         types.insert(HKObjectType.activitySummaryType())
         types.insert(HKObjectType.workoutType())

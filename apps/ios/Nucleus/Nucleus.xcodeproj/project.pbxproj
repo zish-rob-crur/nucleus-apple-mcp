@@ -9,12 +9,24 @@
 /* Begin PBXBuildFile section */
 		05FE240D937B40819CBB8DF4 /* HealthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB309D48470418CA924AD52 /* HealthModels.swift */; };
 		0F1A2B3C4D5E6F708192A3B4 /* HealthSyncState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A8B7C6D5E4F302918273645 /* HealthSyncState.swift */; };
+		11AA11AA11AA11AA11AA11AA /* NucleusActivitySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD22DD22DD22DD22DD22DD22 /* NucleusActivitySnapshot.swift */; };
+		14AB28CD90EF41A18C2E51F7 /* SyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3A6C2E91D54FE1A82C0B47 /* SyncSettingsView.swift */; };
+		1938B0D92C754CB68435C8A9 /* HealthCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CBA841E2790456C9F889EC8 /* HealthCollector.swift */; };
+		22BB22BB22BB22BB22BB22BB /* NucleusActivitySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD22DD22DD22DD22DD22DD22 /* NucleusActivitySnapshot.swift */; };
+		33CC33CC33CC33CC33CC33CC /* NucleusWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88CC88CC88CC88CC88CC88CC /* NucleusWidgetsBundle.swift */; };
+		44DD44DD44DD44DD44DD44DD /* NucleusSyncStatusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99DD99DD99DD99DD99DD99DD /* NucleusSyncStatusWidget.swift */; };
+		55EE55EE55EE55EE55EE55EE /* NucleusWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC11CC11CC11CC11CC11CC11 /* NucleusWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		66AA66AA66AA66AA66AA66AA /* NucleusSyncLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE22EE22EE22EE22EE22EE22 /* NucleusSyncLiveActivity.swift */; };
 		6E0505A41CFE7F26C8ED8FC0 /* ObjectStoreSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22D9DDEDFE89F35160FAEA84 /* ObjectStoreSettingsView.swift */; };
 		6F3816971B214E1A6EB0B356 /* StorageSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9C72E633CA9EF1147A1A0E /* StorageSettingsView.swift */; };
-		996B8B3EC040CBFBE7ACAA79 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFDA905BB0E99126049DAA9F /* SettingsView.swift */; };
-		1938B0D92C754CB68435C8A9 /* HealthCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CBA841E2790456C9F889EC8 /* HealthCollector.swift */; };
-		9C29AD7172ABD2300ECF5088 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DBC88197ADE90043D894FC5 /* OverviewView.swift */; };
+		77BB77BB77BB77BB77BB77BB /* NucleusSyncLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE22EE22EE22EE22EE22EE22 /* NucleusSyncLiveActivity.swift */; };
 		7F0EA192A6D547F9A4D5C6C8 /* RevisionStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2046A2B79F7E4DE39FF10598 /* RevisionStorage.swift */; };
+		80A1B2C3D4E5F60718293A4B /* PrivacyPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80A1B2C3D4E5F60718293A4A /* PrivacyPolicyView.swift */; };
+		80A1B2C3D4E5F60718293A4D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 80A1B2C3D4E5F60718293A4C /* PrivacyInfo.xcprivacy */; };
+		88AA88AA88AA88AA88AA88AA /* NucleusLiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11FF11FF11FF11FF11FF11 /* NucleusLiveActivityController.swift */; };
+		996B8B3EC040CBFBE7ACAA79 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFDA905BB0E99126049DAA9F /* SettingsView.swift */; };
+		99BB99BB99BB99BB99BB99BB /* NucleusSyncLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB12AB12AB12AB12AB12AB12 /* NucleusSyncLiveActivityWidget.swift */; };
+		9C29AD7172ABD2300ECF5088 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DBC88197ADE90043D894FC5 /* OverviewView.swift */; };
 		A755553F30B8455FAE77E4EA /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E891A8BFE5C4703B9F06166 /* AppModel.swift */; };
 		A8E96EFCD2BF4E20A65E9DC5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4BDB7BF220214A429FF31264 /* Assets.xcassets */; };
 		B2E8A5D0C2C741CBA2032ECC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C549216CC464C59ADEDEB9A /* ContentView.swift */; };
@@ -25,29 +37,72 @@
 		FFE955B0CD0A4BE18BD87D53 /* NucleusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E4F1F391B704BE99525C057 /* NucleusApp.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		6666777788889999AAAABBBB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 79B822B335B94D2BB59EF8E5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 55556666777788889999AAAA;
+			remoteInfo = NucleusWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		444455556666777788889999 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				55EE55EE55EE55EE55EE55EE /* NucleusWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		1DBC88197ADE90043D894FC5 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
 		0FB309D48470418CA924AD52 /* HealthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthModels.swift; sourceTree = "<group>"; };
-		9A8B7C6D5E4F302918273645 /* HealthSyncState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncState.swift; sourceTree = "<group>"; };
+		1DBC88197ADE90043D894FC5 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
 		2046A2B79F7E4DE39FF10598 /* RevisionStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevisionStorage.swift; sourceTree = "<group>"; };
+		22D9DDEDFE89F35160FAEA84 /* ObjectStoreSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectStoreSettingsView.swift; sourceTree = "<group>"; };
 		2C549216CC464C59ADEDEB9A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		2EB5EE6CDFA7F1A05C76D794 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		42712A422FD44961BD6C5C16 /* NucleusDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NucleusDesign.swift; sourceTree = "<group>"; };
 		4BDB7BF220214A429FF31264 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4E891A8BFE5C4703B9F06166 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		7B3A6C2E91D54FE1A82C0B47 /* SyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncSettingsView.swift; sourceTree = "<group>"; };
 		7E4F1F391B704BE99525C057 /* NucleusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NucleusApp.swift; sourceTree = "<group>"; };
-		8E9C72E633CA9EF1147A1A0E /* StorageSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSettingsView.swift; sourceTree = "<group>"; };
+		80A1B2C3D4E5F60718293A4A /* PrivacyPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyPolicyView.swift; sourceTree = "<group>"; };
+		80A1B2C3D4E5F60718293A4C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		88CC88CC88CC88CC88CC88CC /* NucleusWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NucleusWidgetsBundle.swift; sourceTree = "<group>"; };
 		8CBA841E2790456C9F889EC8 /* HealthCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCollector.swift; sourceTree = "<group>"; };
-		22D9DDEDFE89F35160FAEA84 /* ObjectStoreSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectStoreSettingsView.swift; sourceTree = "<group>"; };
-		C88666E1D966BD92ADD57335 /* SyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncView.swift; sourceTree = "<group>"; };
+		8E9C72E633CA9EF1147A1A0E /* StorageSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSettingsView.swift; sourceTree = "<group>"; };
+		99DD99DD99DD99DD99DD99DD /* NucleusSyncStatusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NucleusSyncStatusWidget.swift; sourceTree = "<group>"; };
+		9A8B7C6D5E4F302918273645 /* HealthSyncState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncState.swift; sourceTree = "<group>"; };
+		AAEEAAEEAAEEAAEEAAEEAAEE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AB12AB12AB12AB12AB12AB12 /* NucleusSyncLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NucleusSyncLiveActivityWidget.swift; sourceTree = "<group>"; };
+		BBFFBBFFBBFFBBFFBBFFBBFF /* NucleusWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NucleusWidgets.entitlements; sourceTree = "<group>"; };
 		C3EC4321E6334582B21C12B6 /* Nucleus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Nucleus.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C88666E1D966BD92ADD57335 /* SyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncView.swift; sourceTree = "<group>"; };
+		CC11CC11CC11CC11CC11CC11 /* NucleusWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NucleusWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB4B41CC425B4F4AA835BE69 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		DD22DD22DD22DD22DD22DD22 /* NucleusActivitySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NucleusActivitySnapshot.swift; sourceTree = "<group>"; };
 		E77A91C6C9E64FB7A20F636B /* Nucleus.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Nucleus.entitlements; sourceTree = "<group>"; };
+		EE22EE22EE22EE22EE22EE22 /* NucleusSyncLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NucleusSyncLiveActivity.swift; sourceTree = "<group>"; };
 		EFDA905BB0E99126049DAA9F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		F1E2D3C4B5A6978818293A4C /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		FF11FF11FF11FF11FF11FF11 /* NucleusLiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NucleusLiveActivityController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		111122223333444455556666 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BEE26EB2D4D34672A9607B6D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -62,13 +117,16 @@
 			isa = PBXGroup;
 			children = (
 				4E891A8BFE5C4703B9F06166 /* AppModel.swift */,
+				FF11FF11FF11FF11FF11FF11 /* NucleusLiveActivityController.swift */,
 				7E4F1F391B704BE99525C057 /* NucleusApp.swift */,
 				2C549216CC464C59ADEDEB9A /* ContentView.swift */,
 				1DBC88197ADE90043D894FC5 /* OverviewView.swift */,
 				C88666E1D966BD92ADD57335 /* SyncView.swift */,
 				EFDA905BB0E99126049DAA9F /* SettingsView.swift */,
+				7B3A6C2E91D54FE1A82C0B47 /* SyncSettingsView.swift */,
 				8E9C72E633CA9EF1147A1A0E /* StorageSettingsView.swift */,
 				22D9DDEDFE89F35160FAEA84 /* ObjectStoreSettingsView.swift */,
+				80A1B2C3D4E5F60718293A4A /* PrivacyPolicyView.swift */,
 				2EB5EE6CDFA7F1A05C76D794 /* DiagnosticsView.swift */,
 				42712A422FD44961BD6C5C16 /* NucleusDesign.swift */,
 				8CBA841E2790456C9F889EC8 /* HealthCollector.swift */,
@@ -77,6 +135,7 @@
 				2046A2B79F7E4DE39FF10598 /* RevisionStorage.swift */,
 				E77A91C6C9E64FB7A20F636B /* Nucleus.entitlements */,
 				DB4B41CC425B4F4AA835BE69 /* Info.plist */,
+				80A1B2C3D4E5F60718293A4C /* PrivacyInfo.xcprivacy */,
 				F1E2D3C4B5A6978818293A4C /* LaunchScreen.storyboard */,
 				4BDB7BF220214A429FF31264 /* Assets.xcassets */,
 			);
@@ -87,6 +146,8 @@
 			isa = PBXGroup;
 			children = (
 				758ABA8923864118A73B9779 /* Nucleus */,
+				EE33EE33EE33EE33EE33EE33 /* Shared */,
+				FF44FF44FF44FF44FF44FF44 /* NucleusWidgets */,
 				D37987895B75433883098E3E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -95,13 +156,52 @@
 			isa = PBXGroup;
 			children = (
 				C3EC4321E6334582B21C12B6 /* Nucleus.app */,
+				CC11CC11CC11CC11CC11CC11 /* NucleusWidgets.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		EE33EE33EE33EE33EE33EE33 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				DD22DD22DD22DD22DD22DD22 /* NucleusActivitySnapshot.swift */,
+				EE22EE22EE22EE22EE22EE22 /* NucleusSyncLiveActivity.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		FF44FF44FF44FF44FF44FF44 /* NucleusWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				88CC88CC88CC88CC88CC88CC /* NucleusWidgetsBundle.swift */,
+				99DD99DD99DD99DD99DD99DD /* NucleusSyncStatusWidget.swift */,
+				AB12AB12AB12AB12AB12AB12 /* NucleusSyncLiveActivityWidget.swift */,
+				BBFFBBFFBBFFBBFFBBFFBBFF /* NucleusWidgets.entitlements */,
+				AAEEAAEEAAEEAAEEAAEEAAEE /* Info.plist */,
+			);
+			path = NucleusWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		55556666777788889999AAAA /* NucleusWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAAABBBBCCCCDDDDEEEEFFFF /* Build configuration list for PBXNativeTarget "NucleusWidgets" */;
+			buildPhases = (
+				333344445555666677778888 /* Sources */,
+				111122223333444455556666 /* Frameworks */,
+				222233334444555566667777 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NucleusWidgets;
+			productName = NucleusWidgets;
+			productReference = CC11CC11CC11CC11CC11CC11 /* NucleusWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		8E9C93559D4D477DB26B10BE /* Nucleus */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 88B61B9A9BEC4F44ADFFB155 /* Build configuration list for PBXNativeTarget "Nucleus" */;
@@ -109,10 +209,12 @@
 				CE40D0DE55764B14A002226B /* Sources */,
 				BEE26EB2D4D34672A9607B6D /* Frameworks */,
 				BA7C3BA624DF45FA8FE57343 /* Resources */,
+				444455556666777788889999 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				777788889999AAAABBBBCCCC /* PBXTargetDependency */,
 			);
 			name = Nucleus;
 			productName = Nucleus;
@@ -127,8 +229,11 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2602;
-				LastUpgradeCheck = 2602;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
+					55556666777788889999AAAA = {
+						CreatedOnToolsVersion = 26.2;
+					};
 					8E9C93559D4D477DB26B10BE = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -148,35 +253,61 @@
 			projectRoot = "";
 			targets = (
 				8E9C93559D4D477DB26B10BE /* Nucleus */,
+				55556666777788889999AAAA /* NucleusWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		222233334444555566667777 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BA7C3BA624DF45FA8FE57343 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				A8E96EFCD2BF4E20A65E9DC5 /* Assets.xcassets in Resources */,
 				E1F2A3B4C5D6E7F818293A4D /* LaunchScreen.storyboard in Resources */,
+				80A1B2C3D4E5F60718293A4D /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		333344445555666677778888 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22BB22BB22BB22BB22BB22BB /* NucleusActivitySnapshot.swift in Sources */,
+				77BB77BB77BB77BB77BB77BB /* NucleusSyncLiveActivity.swift in Sources */,
+				33CC33CC33CC33CC33CC33CC /* NucleusWidgetsBundle.swift in Sources */,
+				44DD44DD44DD44DD44DD44DD /* NucleusSyncStatusWidget.swift in Sources */,
+				99BB99BB99BB99BB99BB99BB /* NucleusSyncLiveActivityWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CE40D0DE55764B14A002226B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				11AA11AA11AA11AA11AA11AA /* NucleusActivitySnapshot.swift in Sources */,
+				66AA66AA66AA66AA66AA66AA /* NucleusSyncLiveActivity.swift in Sources */,
 				A755553F30B8455FAE77E4EA /* AppModel.swift in Sources */,
+				88AA88AA88AA88AA88AA88AA /* NucleusLiveActivityController.swift in Sources */,
 				FFE955B0CD0A4BE18BD87D53 /* NucleusApp.swift in Sources */,
 				B2E8A5D0C2C741CBA2032ECC /* ContentView.swift in Sources */,
 				9C29AD7172ABD2300ECF5088 /* OverviewView.swift in Sources */,
 				D993C6618764F3F0FC819F94 /* SyncView.swift in Sources */,
 				996B8B3EC040CBFBE7ACAA79 /* SettingsView.swift in Sources */,
+				14AB28CD90EF41A18C2E51F7 /* SyncSettingsView.swift in Sources */,
 				6F3816971B214E1A6EB0B356 /* StorageSettingsView.swift in Sources */,
 				6E0505A41CFE7F26C8ED8FC0 /* ObjectStoreSettingsView.swift in Sources */,
+				80A1B2C3D4E5F60718293A4B /* PrivacyPolicyView.swift in Sources */,
 				D34E141AF315D92D782D6132 /* DiagnosticsView.swift in Sources */,
 				C713E9B7BB8B4382893C1A00 /* NucleusDesign.swift in Sources */,
 				1938B0D92C754CB68435C8A9 /* HealthCollector.swift in Sources */,
@@ -188,6 +319,14 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		777788889999AAAABBBBCCCC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 55556666777788889999AAAA /* NucleusWidgets */;
+			targetProxy = 6666777788889999AAAABBBB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
 		2685153330DB4A52AC86A884 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -195,20 +334,21 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Nucleus/Nucleus.entitlements;
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_ENTITLEMENTS = Nucleus/Nucleus.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = T42QVPM56V;
+				DEVELOPMENT_TEAM = 4JV7ZB6UH9;
 				INFOPLIST_FILE = Nucleus/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Nucleus;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.zish-rob-crur.nucleus";
+				PRODUCT_BUNDLE_IDENTIFIER = com.zhiwenwang.nucleus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
@@ -222,8 +362,39 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				MARKETING_VERSION = 0.1.0;
+				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
@@ -234,13 +405,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Nucleus/Nucleus.entitlements;
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_ENTITLEMENTS = Nucleus/Nucleus.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = T42QVPM56V;
+				DEVELOPMENT_TEAM = 4JV7ZB6UH9;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Nucleus/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Nucleus;
@@ -248,7 +420,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.zish-rob-crur.nucleus";
+				PRODUCT_BUNDLE_IDENTIFIER = com.zhiwenwang.nucleus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
@@ -260,12 +432,107 @@
 			};
 			name = Debug;
 		};
+		88889999AAAABBBBCCCCDDDD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_ENTITLEMENTS = NucleusWidgets/NucleusWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4JV7ZB6UH9;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = NucleusWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zhiwenwang.nucleus.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		9999AAAABBBBCCCCDDDDEEEE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_ENTITLEMENTS = NucleusWidgets/NucleusWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4JV7ZB6UH9;
+				INFOPLIST_FILE = NucleusWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zhiwenwang.nucleus.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 		B3F60CAB91084CB7ADA7CB33 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				MARKETING_VERSION = 0.1.0;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
@@ -278,6 +545,15 @@
 			buildConfigurations = (
 				63F1BA57DB8B407B80E1F427 /* Debug */,
 				2685153330DB4A52AC86A884 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAAABBBBCCCCDDDDEEEEFFFF /* Build configuration list for PBXNativeTarget "NucleusWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				88889999AAAABBBBCCCCDDDD /* Debug */,
+				9999AAAABBBBCCCCDDDDEEEE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

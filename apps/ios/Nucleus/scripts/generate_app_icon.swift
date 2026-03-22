@@ -11,12 +11,13 @@ struct IconSpec {
 }
 
 struct Palette {
-    static let ink = CGColor(srgbRed: 0.05, green: 0.06, blue: 0.07, alpha: 1.0)
-    static let graphite = CGColor(srgbRed: 0.09, green: 0.10, blue: 0.12, alpha: 1.0)
-    static let deepTeal = CGColor(srgbRed: 0.03, green: 0.18, blue: 0.16, alpha: 1.0)
-    static let accent = CGColor(srgbRed: 0.36, green: 0.96, blue: 0.76, alpha: 1.0)
-    static let accentDeep = CGColor(srgbRed: 0.14, green: 0.80, blue: 0.62, alpha: 1.0)
-    static let mist = CGColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.10)
+    static let ink = CGColor(srgbRed: 0.06, green: 0.07, blue: 0.08, alpha: 1.0)
+    static let graphite = CGColor(srgbRed: 0.11, green: 0.14, blue: 0.13, alpha: 1.0)
+    static let deepForest = CGColor(srgbRed: 0.09, green: 0.21, blue: 0.18, alpha: 1.0)
+    static let accent = CGColor(srgbRed: 0.42, green: 0.72, blue: 0.56, alpha: 1.0)
+    static let accentBright = CGColor(srgbRed: 0.76, green: 0.92, blue: 0.84, alpha: 1.0)
+    static let accentDeep = CGColor(srgbRed: 0.24, green: 0.48, blue: 0.37, alpha: 1.0)
+    static let mist = CGColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.12)
 }
 
 func makeGradient(_ colors: [CGColor], locations: [CGFloat]) -> CGGradient {
@@ -26,8 +27,8 @@ func makeGradient(_ colors: [CGColor], locations: [CGFloat]) -> CGGradient {
 
 func drawBackground(in ctx: CGContext, size: CGFloat) {
     let bg = makeGradient(
-        [Palette.ink, Palette.graphite, Palette.deepTeal],
-        locations: [0.0, 0.52, 1.0]
+        [Palette.ink, Palette.graphite, Palette.deepForest],
+        locations: [0.0, 0.56, 1.0]
     )
     ctx.drawLinearGradient(
         bg,
@@ -38,8 +39,8 @@ func drawBackground(in ctx: CGContext, size: CGFloat) {
 
     let aurora1 = makeGradient(
         [
-            CGColor(srgbRed: 0.36, green: 0.96, blue: 0.76, alpha: 0.35),
-            CGColor(srgbRed: 0.36, green: 0.96, blue: 0.76, alpha: 0.12),
+            Palette.accent.opacity(0.18),
+            Palette.accent.opacity(0.08),
             CGColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0.0),
         ],
         locations: [0.0, 0.32, 1.0]
@@ -55,8 +56,8 @@ func drawBackground(in ctx: CGContext, size: CGFloat) {
 
     let aurora2 = makeGradient(
         [
-            CGColor(srgbRed: 0.14, green: 0.80, blue: 0.62, alpha: 0.18),
-            CGColor(srgbRed: 0.14, green: 0.80, blue: 0.62, alpha: 0.06),
+            Palette.accentDeep.opacity(0.20),
+            Palette.accentDeep.opacity(0.06),
             CGColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0.0),
         ],
         locations: [0.0, 0.42, 1.0]
@@ -73,8 +74,8 @@ func drawBackground(in ctx: CGContext, size: CGFloat) {
     let vignette = makeGradient(
         [
             CGColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0.0),
-            CGColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0.18),
-            CGColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0.40),
+            CGColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0.20),
+            CGColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0.46),
         ],
         locations: [0.0, 0.62, 1.0]
     )
@@ -86,6 +87,24 @@ func drawBackground(in ctx: CGContext, size: CGFloat) {
         endRadius: size * 0.78,
         options: []
     )
+}
+
+extension CGColor {
+    func opacity(_ alpha: CGFloat) -> CGColor {
+        copy(alpha: alpha) ?? self
+    }
+}
+
+func makeOrbitTransform(center: CGPoint, rotation: CGFloat, scaleX: CGFloat, scaleY: CGFloat) -> CGAffineTransform {
+    var transform = CGAffineTransform.identity
+    transform = transform.translatedBy(x: center.x, y: center.y)
+    transform = transform.rotated(by: rotation)
+    transform = transform.scaledBy(x: scaleX, y: scaleY)
+    return transform
+}
+
+func orbitPoint(angle: CGFloat, radius: CGFloat, transform: CGAffineTransform) -> CGPoint {
+    CGPoint(x: cos(angle) * radius, y: sin(angle) * radius).applying(transform)
 }
 
 func drawNucleusOrbital(in ctx: CGContext, size: CGFloat) {
@@ -245,14 +264,20 @@ func drawNucleusOrbital(in ctx: CGContext, size: CGFloat) {
 }
 
 func drawNucleusMinimal(in ctx: CGContext, size: CGFloat) {
-    let center = CGPoint(x: size * 0.54, y: size * 0.50)
-    let coreR = size * 0.12
+    let center = CGPoint(x: size * 0.51, y: size * 0.52)
+    let coreR = size * 0.19
+    let ringRadius = size * 0.31
+    let rotation = -CGFloat.pi * 0.19
+    let scaleX: CGFloat = 1.18
+    let scaleY: CGFloat = 0.66
+    let ringTransform = makeOrbitTransform(center: center, rotation: rotation, scaleX: scaleX, scaleY: scaleY)
+    let stroke = max(1.5, size * 0.012) / max(scaleX, scaleY)
 
     let coreGlow = makeGradient(
         [
-            CGColor(srgbRed: 0.36, green: 0.96, blue: 0.76, alpha: 0.22),
-            CGColor(srgbRed: 0.36, green: 0.96, blue: 0.76, alpha: 0.10),
-            CGColor(srgbRed: 0.36, green: 0.96, blue: 0.76, alpha: 0.0),
+            Palette.accent.opacity(0.22),
+            Palette.accent.opacity(0.08),
+            Palette.accent.opacity(0.0),
         ],
         locations: [0.0, 0.38, 1.0]
     )
@@ -266,15 +291,29 @@ func drawNucleusMinimal(in ctx: CGContext, size: CGFloat) {
     )
 
     ctx.saveGState()
+    ctx.translateBy(x: center.x, y: center.y)
+    ctx.rotate(by: rotation)
+    ctx.scaleBy(x: scaleX, y: scaleY)
+    ctx.setLineCap(.round)
+    ctx.setShadow(offset: .zero, blur: size * 0.028, color: Palette.accent.opacity(0.16))
+    ctx.setStrokeColor(Palette.accent.opacity(0.16))
+    ctx.setLineWidth(stroke)
+    ctx.addArc(center: .zero, radius: ringRadius, startAngle: CGFloat.pi * 0.16, endAngle: CGFloat.pi * 0.96, clockwise: false)
+    ctx.strokePath()
+    ctx.addArc(center: .zero, radius: ringRadius, startAngle: CGFloat.pi * 1.08, endAngle: CGFloat.pi * 1.34, clockwise: false)
+    ctx.strokePath()
+    ctx.restoreGState()
+
+    ctx.saveGState()
     let corePath = CGPath(ellipseIn: CGRect(x: center.x - coreR, y: center.y - coreR, width: coreR * 2, height: coreR * 2), transform: nil)
     ctx.addPath(corePath)
     ctx.clip()
 
     let fill = makeGradient(
         [
-            CGColor(srgbRed: 0.70, green: 1.0, blue: 0.94, alpha: 0.92),
-            CGColor(srgbRed: 0.36, green: 0.96, blue: 0.76, alpha: 0.92),
-            CGColor(srgbRed: 0.06, green: 0.30, blue: 0.25, alpha: 1.0),
+            Palette.accentBright.opacity(0.96),
+            Palette.accent.opacity(0.96),
+            Palette.accentDeep,
         ],
         locations: [0.0, 0.42, 1.0]
     )
@@ -286,17 +325,27 @@ func drawNucleusMinimal(in ctx: CGContext, size: CGFloat) {
         endRadius: coreR * 1.22,
         options: []
     )
+
+    ctx.saveGState()
+    ctx.translateBy(x: center.x + coreR * 0.08, y: center.y + coreR * 0.04)
+    ctx.rotate(by: rotation)
+    ctx.scaleBy(x: 1.0, y: 0.58)
+    ctx.setLineCap(.round)
+    ctx.setStrokeColor(Palette.accentBright.opacity(0.14))
+    ctx.setLineWidth(coreR * 0.30)
+    ctx.addArc(center: .zero, radius: coreR * 0.78, startAngle: CGFloat.pi * 0.78, endAngle: CGFloat.pi * 1.84, clockwise: false)
+    ctx.strokePath()
+    ctx.setStrokeColor(Palette.accentDeep.opacity(0.12))
+    ctx.setLineWidth(coreR * 0.16)
+    ctx.addArc(center: .zero, radius: coreR * 0.90, startAngle: CGFloat.pi * 0.82, endAngle: CGFloat.pi * 1.78, clockwise: false)
+    ctx.strokePath()
     ctx.restoreGState()
 
-    ctx.setStrokeColor(CGColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.18))
-    ctx.setLineWidth(max(1, size * 0.006))
-    ctx.strokeEllipse(in: CGRect(x: center.x - coreR, y: center.y - coreR, width: coreR * 2, height: coreR * 2))
+    ctx.restoreGState()
 
-    let ringRadius = size * 0.32
-    let rotation = -CGFloat.pi * 0.14
-    let scaleX: CGFloat = 1.22
-    let scaleY: CGFloat = 0.78
-    let stroke = max(1, size * 0.008) / max(scaleX, scaleY)
+    ctx.setStrokeColor(Palette.mist.opacity(0.42))
+    ctx.setLineWidth(max(1.2, size * 0.007))
+    ctx.strokeEllipse(in: CGRect(x: center.x - coreR, y: center.y - coreR, width: coreR * 2, height: coreR * 2))
 
     ctx.saveGState()
     ctx.translateBy(x: center.x, y: center.y)
@@ -306,22 +355,18 @@ func drawNucleusMinimal(in ctx: CGContext, size: CGFloat) {
 
     // Soft glow pass.
     ctx.setBlendMode(.plusLighter)
-    ctx.setShadow(offset: .zero, blur: size * 0.030, color: CGColor(srgbRed: 0.36, green: 0.96, blue: 0.76, alpha: 0.18))
-    ctx.setStrokeColor(CGColor(srgbRed: 0.36, green: 0.96, blue: 0.76, alpha: 0.20))
+    ctx.setShadow(offset: .zero, blur: size * 0.030, color: Palette.accent.opacity(0.18))
+    ctx.setStrokeColor(Palette.accent.opacity(0.26))
     ctx.setLineWidth(stroke)
-    ctx.addArc(center: .zero, radius: ringRadius, startAngle: CGFloat.pi * 0.10, endAngle: CGFloat.pi * 1.18, clockwise: false)
-    ctx.strokePath()
-    ctx.addArc(center: .zero, radius: ringRadius, startAngle: CGFloat.pi * 1.32, endAngle: CGFloat.pi * 1.92, clockwise: false)
+    ctx.addArc(center: .zero, radius: ringRadius, startAngle: CGFloat.pi * 1.34, endAngle: CGFloat.pi * 1.96, clockwise: false)
     ctx.strokePath()
 
     // Crisp pass.
     ctx.setShadow(offset: .zero, blur: 0, color: nil)
     ctx.setBlendMode(.normal)
-    ctx.setStrokeColor(CGColor(srgbRed: 0.65, green: 1.0, blue: 0.92, alpha: 0.20))
-    ctx.setLineWidth(stroke * 0.94)
-    ctx.addArc(center: .zero, radius: ringRadius, startAngle: CGFloat.pi * 0.12, endAngle: CGFloat.pi * 1.16, clockwise: false)
-    ctx.strokePath()
-    ctx.addArc(center: .zero, radius: ringRadius, startAngle: CGFloat.pi * 1.34, endAngle: CGFloat.pi * 1.90, clockwise: false)
+    ctx.setStrokeColor(Palette.accentBright.opacity(0.38))
+    ctx.setLineWidth(stroke * 0.92)
+    ctx.addArc(center: .zero, radius: ringRadius, startAngle: CGFloat.pi * 1.35, endAngle: CGFloat.pi * 1.94, clockwise: false)
     ctx.strokePath()
 
     ctx.restoreGState()
@@ -350,6 +395,33 @@ func drawNucleusMinimal(in ctx: CGContext, size: CGFloat) {
         options: []
     )
     ctx.restoreGState()
+
+    let nucleusPoint = CGPoint(x: center.x - coreR * 0.42, y: center.y - coreR * 0.48)
+    let nucleusRadius = coreR * 0.085
+    ctx.setFillColor(Palette.graphite)
+    ctx.fillEllipse(in: CGRect(x: nucleusPoint.x - nucleusRadius, y: nucleusPoint.y - nucleusRadius, width: nucleusRadius * 2, height: nucleusRadius * 2))
+
+    let electronAngle = CGFloat.pi * 1.79
+    let electronCenter = orbitPoint(angle: electronAngle, radius: ringRadius, transform: ringTransform)
+    let electronRadius = max(1.8, size * 0.024)
+    let electronGlow = makeGradient(
+        [
+            Palette.accentBright.opacity(0.54),
+            Palette.accent.opacity(0.18),
+            Palette.accent.opacity(0.0),
+        ],
+        locations: [0.0, 0.46, 1.0]
+    )
+    ctx.drawRadialGradient(
+        electronGlow,
+        startCenter: electronCenter,
+        startRadius: 0,
+        endCenter: electronCenter,
+        endRadius: electronRadius * 2.8,
+        options: []
+    )
+    ctx.setFillColor(Palette.accentBright.opacity(0.98))
+    ctx.fillEllipse(in: CGRect(x: electronCenter.x - electronRadius, y: electronCenter.y - electronRadius, width: electronRadius * 2, height: electronRadius * 2))
 }
 
 enum IconStyle: String {
@@ -418,15 +490,6 @@ let specs: [IconSpec] = [
     IconSpec(filename: "AppIcon-iPhone-40@3x.png", pixels: 120),
     IconSpec(filename: "AppIcon-iPhone-60@2x.png", pixels: 120),
     IconSpec(filename: "AppIcon-iPhone-60@3x.png", pixels: 180),
-    IconSpec(filename: "AppIcon-iPad-20@1x.png", pixels: 20),
-    IconSpec(filename: "AppIcon-iPad-20@2x.png", pixels: 40),
-    IconSpec(filename: "AppIcon-iPad-29@1x.png", pixels: 29),
-    IconSpec(filename: "AppIcon-iPad-29@2x.png", pixels: 58),
-    IconSpec(filename: "AppIcon-iPad-40@1x.png", pixels: 40),
-    IconSpec(filename: "AppIcon-iPad-40@2x.png", pixels: 80),
-    IconSpec(filename: "AppIcon-iPad-76@1x.png", pixels: 76),
-    IconSpec(filename: "AppIcon-iPad-76@2x.png", pixels: 152),
-    IconSpec(filename: "AppIcon-iPad-83.5@2x.png", pixels: 167),
     IconSpec(filename: "AppIcon-1024.png", pixels: 1024),
 ]
 

@@ -5,7 +5,7 @@ struct DiagnosticsView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
+        ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 summaryCard
                 logsCard
@@ -18,6 +18,7 @@ struct DiagnosticsView: View {
             .padding(.bottom, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.hidden)
         .background(NucleusBackground())
         .navigationTitle("Diagnostics")
         .navigationBarTitleDisplayMode(.inline)

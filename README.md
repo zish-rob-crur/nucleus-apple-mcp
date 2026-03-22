@@ -13,10 +13,7 @@ Unlike fragile PyObjC bridges, **Nucleus** uses a hybrid architecture: a Python 
 * **📅 Calendar:** Fetch upcoming schedules, check availability, and create events via `EventKit`.
 * **✅ Reminders:** Read pending tasks and manage your to-do lists via `EventKit`.
 * **📝 Notes:** List/search notes, read content, and add/export attachments via Notes.app (Apple Events).
-
-### 🚧 Planned (not implemented yet)
-
-* **❤️ Health:** Ingest health metrics (sleep, heart rate, activity) via iOS-to-Mac iCloud exports.
+* **❤️ Health:** Read exported Apple Health metrics and raw samples from an S3-compatible object store.
 
 ### 🏗 Architecture
 
@@ -32,10 +29,38 @@ Unlike fragile PyObjC bridges, **Nucleus** uses a hybrid architecture: a Python 
 ### 🚀 Usage
 
 ```bash
-# No manual compilation required.
-# The Python wrapper handles the local Swift build automatically.
+# Run the CLI directly.
+uvx --from nucleus-apple-mcp nucleus-apple health list-sample-catalog
+
+# Or run the MCP server.
 uvx nucleus-apple-mcp
 ```
+
+## 🧰 CLI
+
+Install the package once and use the unified `nucleus-apple` command:
+
+```bash
+uv tool install nucleus-apple-mcp
+```
+
+Examples:
+
+```bash
+# Calendar
+nucleus-apple calendar list-events --start 2026-03-15T09:00:00+08:00 --end 2026-03-15T18:00:00+08:00 --pretty
+
+# Reminders
+nucleus-apple reminders list-reminders --due-end 2026-03-20 --pretty
+
+# Notes
+nucleus-apple notes list-notes --query project --include-plaintext-excerpt --pretty
+
+# Health
+nucleus-apple health read-daily-metrics --date 2026-03-14 --pretty
+```
+
+The CLI mirrors the MCP tool surface and emits JSON, which makes it suitable for shell automation and OpenClaw-style skills.
 
 ## 🔧 Add as an MCP server
 
@@ -60,3 +85,20 @@ claude mcp add --scope user nucleus-apple -- uvx nucleus-apple-mcp
 # Verify
 claude mcp list
 ```
+
+You can also launch the server through the CLI:
+
+```bash
+nucleus-apple mcp serve
+```
+
+## 🪝 OpenClaw Skills
+
+This repository includes OpenClaw-ready skills under `skills/` for:
+
+* `nucleus-apple-calendar`
+* `nucleus-apple-reminders`
+* `nucleus-apple-notes`
+* `nucleus-apple-health`
+
+Each skill depends on the `nucleus-apple` binary and is designed to be contributed upstream without changing the command surface.

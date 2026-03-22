@@ -12,8 +12,9 @@ The old `health/v0/...revisions/latest.json` design is removed. The project is s
 ## 1. Scope
 
 - Collector runtime: iOS app (`Nucleus`)
-- Source of truth: files written by the iOS app into app Documents, optionally uploaded to an S3-compatible object store
-- MCP reads those files directly from iCloud Drive or S3-compatible object storage
+- Source of truth: files written by the iOS app into private app storage, optionally uploaded to an S3-compatible object store
+- Shipping app path: Nucleus does not sync Health exports to iCloud. This product line was removed for App Store distribution because Apple App Review Guideline 5.1.3(ii) disallows storing personal health information in iCloud.
+- MCP reads those files from an S3-compatible object store
 - No compatibility guarantee with earlier health export layouts
 
 ## 2. Design Goals
@@ -25,9 +26,9 @@ The old `health/v0/...revisions/latest.json` design is removed. The project is s
 
 ## 2.1 Local Collector State
 
-The iOS collector also keeps a local-only anchor store in app private storage.
+The iOS collector also keeps a private anchor store in app storage.
 
-- It is not uploaded to iCloud Drive.
+- It is not synced to iCloud Drive.
 - It is not uploaded to S3-compatible object storage.
 - It stores HealthKit anchor cursors and a UUID → date index used to resolve deletions.
 
@@ -347,6 +348,16 @@ This is a current-state materialized-view model, not an append-only historical a
 - return commits whose `commit_id` is lexicographically greater than `since_cursor`
 - optionally enrich each changed date with raw type `status`, `record_count`, and `relpath`
 
+### 7.8 Range Analysis
+
+`health.analyze_range(start_date, end_date, metric_keys?, segment_count=3)`
+
+- read the same monthly indexes used by `health.read_range_metrics`
+- analyze exported daily snapshots in-memory
+- do not read raw samples by default
+- return per-metric coverage, summary statistics, segment means, trend direction, notable days, and short insight strings
+- report missing dates explicitly so analysis confidence can be judged from data completeness
+
 ## 8. MCP Tool Set
 
 Required:
@@ -354,6 +365,7 @@ Required:
 - `health.list_sample_catalog`
 - `health.read_daily_metrics`
 - `health.read_range_metrics`
+- `health.analyze_range`
 - `health.read_samples`
 - `health.read_daily_raw`
 - `health.inspect_day`
@@ -361,10 +373,24 @@ Required:
 
 ## 9. Storage Configuration
 
-The reference MCP implementation reads from one of:
+Shipping product path:
 
-- `icloud_drive`
+- private export inside the iOS app container
+- optional `s3_object_store` upload for MCP / agent access
+
+The reference MCP implementation reads from:
+
 - `s3_object_store`
+
+Rationale:
+
+- Apple App Review Guideline 5.1.3(ii) does not allow App Store apps to store personal health information in iCloud.
+- Nucleus therefore removed iCloud health sync from the shipping collector path.
+- The MCP implementation no longer exposes an iCloud backend.
+
+Reference:
+
+- https://developer.apple.com/app-store/review/guidelines/
 
 Preferred local config file:
 
@@ -377,7 +403,6 @@ Suggested shape:
 ```toml
 [health]
 storage_backend = "s3_object_store"
-# icloud_root = "/Users/you/Library/Mobile Documents/iCloud~com~example~Nucleus/Documents"
 
 [health.s3]
 endpoint = "https://<accountid>.r2.cloudflarestorage.com"
@@ -391,16 +416,7 @@ use_path_style = true
 
 Environment variables remain supported and override file values when present:
 
-### 9.1 iCloud Drive
-
-- `NUCLEUS_HEALTH_ICLOUD_ROOT`
-- `NUCLEUS_HEALTH_STORAGE_BACKEND`
-
-Absolute path to the app container `Documents/` directory on macOS.
-
-If omitted, MCP attempts best-effort discovery under `~/Library/Mobile Documents/**/Documents/`.
-
-### 9.2 S3-compatible Object Store
+### 9.1 S3-compatible Object Store
 
 - `NUCLEUS_HEALTH_S3_ENDPOINT`
 - `NUCLEUS_HEALTH_S3_REGION`

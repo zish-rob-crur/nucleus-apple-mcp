@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "nucleus-apple": {
+      "command": "uv",
+      "args": [
+        "run",
+        "nucleus-apple-mcp"
+      ]
+    }
+  }
+}

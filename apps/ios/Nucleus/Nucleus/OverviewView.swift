@@ -5,13 +5,14 @@ struct OverviewView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selectedTab: RootTab
 
     @State private var appear = false
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
                 header
 
                 statusCard
@@ -31,17 +32,17 @@ struct OverviewView: View {
             .padding(.bottom, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.hidden)
         .background(NucleusBackground())
         .navigationBarHidden(true)
         .onAppear {
+            guard !reduceMotion else {
+                appear = true
+                return
+            }
             withAnimation(.easeOut(duration: 0.85)) {
                 appear = true
             }
-        }
-        .task {
-            await model.refreshAuthStatus()
-            await model.refreshAnchorDiagnostics()
-            model.refreshStorageStatus(preferICloud: model.preferICloud)
         }
     }
 }
@@ -56,11 +57,11 @@ struct OverviewView: View {
 private extension OverviewView {
     var header: some View {
         let cornerRadius: CGFloat = 28
-        let accentOpacity: Double = colorScheme == .dark ? 0.20 : 0.10
+        let accentOpacity: Double = colorScheme == .dark ? 0.12 : 0.04
 
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 10) {
             Text("Nucleus")
-                .font(.system(size: 46, weight: .semibold, design: .serif))
+                .font(.system(.largeTitle, design: .serif, weight: .semibold))
                 .foregroundStyle(.primary)
                 .tracking(-0.7)
                 .lineLimit(1)
@@ -72,7 +73,7 @@ private extension OverviewView {
                 .lineLimit(2)
                 .minimumScaleFactor(0.9)
 
-            headerChips
+            headerSummary
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
@@ -95,31 +96,46 @@ private extension OverviewView {
                 )
         }
         .overlay(alignment: .topTrailing) {
-            NucleusOrb(state: model.orbState, size: 84)
-                .padding(.top, 14)
-                .padding(.trailing, 14)
-                .opacity(appear ? 1 : 0)
-                .offset(y: appear ? 0 : 12)
+            if model.orbState != .idle {
+                NucleusOrb(state: model.orbState, size: 72)
+                    .padding(.top, 16)
+                    .padding(.trailing, 16)
+                    .opacity(appear ? 1 : 0)
+                    .offset(y: appear ? 0 : 8)
+            }
         }
         .opacity(appear ? 1 : 0)
-        .offset(y: appear ? 0 : 10)
+        .offset(y: entryOffset(10))
         .accessibilityElement(children: .combine)
     }
 
-    var headerChips: some View {
-                HStack(spacing: 10) {
-                    StatusPill(label: healthStatusChip, kind: healthStatusKind, systemImage: healthStatusIcon)
-                    StatusPill(label: model.anchorDiagnostics.modeLabel, kind: model.anchorDiagnostics.unprimedTypeKeys.isEmpty ? .ok : .warning, systemImage: "bolt.badge.clock")
-                    StatusPill(label: backendChipLabel, kind: backendKind, systemImage: backendIcon)
-                    StatusPill(label: objectStoreLabel, kind: objectStoreKind, systemImage: objectStoreIcon)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+    var headerSummary: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                headerFact(title: "Access", value: healthStatusChip, systemImage: healthStatusIcon, kind: healthStatusKind)
+                headerFact(title: "Storage", value: backendChipLabel, systemImage: backendIcon, kind: backendKind)
+                headerFact(title: "Upload", value: objectStoreLabel, systemImage: objectStoreIcon, kind: objectStoreKind)
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(minimum: 120), spacing: 12, alignment: .leading),
+                    GridItem(.flexible(minimum: 120), spacing: 12, alignment: .leading),
+                ],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                headerFact(title: "Access", value: healthStatusChip, systemImage: healthStatusIcon, kind: healthStatusKind)
+                headerFact(title: "Storage", value: backendChipLabel, systemImage: backendIcon, kind: backendKind)
+                headerFact(title: "Upload", value: objectStoreLabel, systemImage: objectStoreIcon, kind: objectStoreKind)
+            }
+        }
     }
 
     var statusCard: some View {
-        NucleusCard("Status", systemImage: "sparkles") {
+        NucleusCard("Status") {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(healthStatusTitle)
                             .font(.system(.callout, design: .rounded).weight(.semibold))
@@ -139,35 +155,33 @@ private extension OverviewView {
                 Divider()
                     .overlay(Color.primary.opacity(0.10))
 
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Storage")
-                            .font(.system(.caption, design: .rounded).weight(.semibold))
-                            .foregroundStyle(Color.secondary)
-                        Text(backendLabel)
-                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                            .foregroundStyle(.primary)
-                    }
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(minimum: 120), spacing: 12, alignment: .leading),
+                        GridItem(.flexible(minimum: 120), spacing: 12, alignment: .leading),
+                    ],
+                    alignment: .leading,
+                    spacing: 12
+                ) {
+                    statusDetail(title: "Storage", value: backendLabel)
+                    statusDetail(title: "Capture", value: syncModeLabel)
+                    statusDetail(title: "Upload", value: objectStoreLabel)
+                }
 
-                    Spacer(minLength: 0)
-
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("Object store")
-                            .font(.system(.caption, design: .rounded).weight(.semibold))
-                            .foregroundStyle(Color.secondary)
-                        Text(objectStoreLabel)
-                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                            .foregroundStyle(.primary)
-                    }
+                if let syncModeNote {
+                    Text(syncModeNote)
+                        .font(.system(.footnote, design: .rounded))
+                        .foregroundStyle(Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
         .opacity(appear ? 1 : 0)
-        .offset(y: appear ? 0 : 14)
+        .offset(y: entryOffset(14))
     }
 
     var quickActionsCard: some View {
-        NucleusCard("Actions", systemImage: "bolt.fill") {
+        NucleusCard("Sync", systemImage: "arrow.triangle.2.circlepath") {
             VStack(alignment: .leading, spacing: 12) {
                 if model.authRequestStatus == .shouldRequest {
                     Button {
@@ -182,128 +196,101 @@ private extension OverviewView {
                 }
 
                 Button {
-                    model.syncNow(catchUpDays: model.catchUpDays)
+                    model.beginManualSync()
                     selectedTab = .sync
                 } label: {
-                    Label(model.isSyncing ? "Syncing…" : "Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                    Label(model.manualSyncButtonTitle, systemImage: "arrow.triangle.2.circlepath")
                         .labelStyle(.titleAndIcon)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(NucleusButtonStyle(kind: .secondary))
-                .disabled(model.isSyncing)
+                .buttonStyle(NucleusButtonStyle(kind: model.authRequestStatus == .shouldRequest ? .secondary : .primary))
+                .disabled(model.isSyncing || model.isBootstrapping)
 
-                HStack(spacing: 10) {
-                    NucleusInlineStat(title: "Window", value: "\(model.catchUpDays)d")
-                    NucleusInlineStat(title: "iCloud", value: model.preferICloud ? "preferred" : "off")
-                }
-
-                Button {
-                    openSettings()
-                } label: {
-                    Label("Open iOS Settings", systemImage: "gearshape")
-                        .labelStyle(.titleAndIcon)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(NucleusButtonStyle(kind: .ghost))
+                Text(syncSummaryText)
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Button {
                     selectedTab = .settings
                 } label: {
-                    Label("Configure Storage & Uploads", systemImage: "gearshape")
+                    Label("Configure Storage & Uploads", systemImage: "shippingbox")
                         .labelStyle(.titleAndIcon)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(NucleusButtonStyle(kind: .ghost))
+
+                if showsSettingsShortcut {
+                    Button {
+                        openSettings()
+                    } label: {
+                        Label("Open iOS Settings", systemImage: "gearshape")
+                            .labelStyle(.titleAndIcon)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(NucleusButtonStyle(kind: .ghost))
+                }
             }
         }
         .opacity(appear ? 1 : 0)
-        .offset(y: appear ? 0 : 16)
+        .offset(y: entryOffset(16))
     }
 
     var latestWriteCard: some View {
-        NucleusCard("Latest", systemImage: "clock") {
+        let snapshot = model.activitySnapshot
+
+        return NucleusCard("Recent Sync", systemImage: "clock.badge.checkmark") {
             VStack(alignment: .leading, spacing: 12) {
-                if let written = model.lastWritten {
-                    HStack(spacing: 10) {
-                        Text(written.revisionId)
-                            .font(.system(.caption, design: .monospaced).weight(.semibold))
-                            .foregroundStyle(NucleusPalette.accent)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                Text(snapshot.title)
+                    .font(.system(.title3, design: .serif, weight: .semibold))
+                    .foregroundStyle(activityTitleColor(snapshot.phase))
 
-                        Spacer(minLength: 0)
+                Text(snapshot.detail)
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                        StatusPill(label: "snapshot", kind: .neutral)
+                Text(snapshot.metaLine)
+                    .font(.system(.footnote, design: .rounded).weight(.medium))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let shortRevision = snapshot.shortRevision {
+                    Text("Revision \(shortRevision)")
+                        .font(.system(.caption, design: .monospaced).weight(.semibold))
+                        .foregroundStyle(NucleusPalette.accentForeground(colorScheme))
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        selectedTab = .sync
+                    } label: {
+                        Label("Open Sync", systemImage: "arrow.triangle.2.circlepath")
+                            .labelStyle(.titleAndIcon)
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(NucleusButtonStyle(kind: snapshot.phase == .ready ? .ghost : .secondary))
 
-                    if let revision = model.latestRevision {
-                        Text(revision.date)
-                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                            .foregroundStyle(.primary)
-                    }
-
-                    Text("Saved to \(backendLabel)")
-                        .font(.system(.footnote, design: .rounded))
-                        .foregroundStyle(Color.secondary)
-
-                    NucleusInset {
-                        VStack(alignment: .leading, spacing: 10) {
-                            fileLine(
-                                title: "Summary",
-                                fileName: written.dailyURL.lastPathComponent,
-                                pathToCopy: written.dailyURL.path(percentEncoded: false)
-                            )
-
-                            fileLine(
-                                title: "Month",
-                                fileName: written.monthURL.lastPathComponent,
-                                pathToCopy: written.monthURL.path(percentEncoded: false)
-                            )
-
-                            if let rawWritten = model.lastRawWritten {
-                                fileLine(
-                                    title: "Raw",
-                                    fileName: rawWritten.manifestURL.lastPathComponent,
-                                    pathToCopy: rawWritten.manifestURL.path(percentEncoded: false)
-                                )
-                            }
-                        }
-                    }
-
-                    HStack(spacing: 10) {
+                    if let written = model.lastWritten {
                         ShareLink(item: written.dailyURL) {
                             Label("Share Summary", systemImage: "square.and.arrow.up")
                                 .labelStyle(.titleAndIcon)
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(NucleusButtonStyle(kind: .ghost))
-
-                        if let rawWritten = model.lastRawWritten {
-                            ShareLink(item: rawWritten.manifestURL) {
-                                Label("Share Raw Manifest", systemImage: "doc.plaintext")
-                                    .labelStyle(.titleAndIcon)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(NucleusButtonStyle(kind: .ghost))
-                        }
                     }
-                } else {
-                    Text("No exports yet. Run Sync Now to generate the first revision.")
-                        .font(.system(.subheadline, design: .rounded))
-                        .foregroundStyle(Color.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
         .opacity(appear ? 1 : 0)
-        .offset(y: appear ? 0 : 18)
+        .offset(y: entryOffset(18))
     }
 
     var footer: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: "lock.shield")
                 .foregroundStyle(Color.secondary.opacity(0.85))
-            Text("Runs locally. Writes to your private storage. Upload is optional.")
+            Text("Runs privately. Upload is optional.")
                 .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(Color.secondary)
         }
@@ -313,9 +300,9 @@ private extension OverviewView {
     var backendLabel: String {
         switch model.storageStatus?.backend {
         case .icloudDrive:
-            "iCloud Drive"
+            "Private"
         case .localDocuments:
-            "Local Documents"
+            "Private"
         case nil:
             "Unknown"
         }
@@ -324,9 +311,9 @@ private extension OverviewView {
     var backendChipLabel: String {
         switch model.storageStatus?.backend {
         case .icloudDrive:
-            "iCloud"
+            "Private"
         case .localDocuments:
-            "Local"
+            "Private"
         case nil:
             "Storage"
         }
@@ -335,7 +322,7 @@ private extension OverviewView {
     var backendIcon: String {
         switch model.storageStatus?.backend {
         case .icloudDrive:
-            "icloud"
+            "folder.fill"
         case .localDocuments:
             "folder.fill"
         case nil:
@@ -345,8 +332,8 @@ private extension OverviewView {
 
     var backendKind: StatusPill.Kind {
         switch model.storageStatus?.backend {
-        case .icloudDrive: .ok
-        case .localDocuments: .warning
+        case .icloudDrive: .neutral
+        case .localDocuments: .neutral
         case nil: .error
         }
     }
@@ -361,7 +348,41 @@ private extension OverviewView {
 
     var objectStoreKind: StatusPill.Kind {
         if !model.objectStoreSettings.enabled { return .neutral }
-        return model.resolvedObjectStoreConfig() != nil ? .ok : .warning
+        return model.resolvedObjectStoreConfig() != nil ? .neutral : .warning
+    }
+
+    var syncModeLabel: String {
+        switch model.anchorDiagnostics.modeLabel {
+        case "bootstrap":
+            "First export"
+        case "partial":
+            "Backfill needed"
+        default:
+            "Incremental"
+        }
+    }
+
+    var syncModeNote: String? {
+        switch model.anchorDiagnostics.modeLabel {
+        case "bootstrap":
+            "The first export will establish anchors for future incremental syncs."
+        case "partial":
+            "Some tracked types still need anchors. The next sync will backfill them."
+        default:
+            nil
+        }
+    }
+
+    var syncSummaryText: String {
+        let storageSummary = "Storage stays private."
+        if model.needsInitialSyncRangeSelection {
+            return "The first sync will ask how much history to import. \(storageSummary)"
+        }
+        return "Fallback window \(model.catchUpDays)d. \(storageSummary)"
+    }
+
+    var showsSettingsShortcut: Bool {
+        model.authRequestStatus != .unnecessary || model.lastError != nil
     }
 
     var healthStatusTitle: String {
@@ -426,25 +447,66 @@ private extension OverviewView {
         openURL(url)
     }
 
+    func entryOffset(_ hiddenOffset: CGFloat) -> CGFloat {
+        reduceMotion ? 0 : (appear ? 0 : hiddenOffset)
+    }
+
     @ViewBuilder
-    func fileLine(title: String, fileName: String, pathToCopy: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+    func headerFact(title: String, value: String, systemImage: String, kind: StatusPill.Kind) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: systemImage)
+                .font(.system(.caption2, design: .rounded).weight(.semibold))
+                .foregroundStyle(Color.secondary)
+                .labelStyle(.titleAndIcon)
+
+            Text(value)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                .foregroundStyle(factForeground(kind))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    func statusDetail(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.system(.caption, design: .rounded).weight(.semibold))
                 .foregroundStyle(Color.secondary)
-                .frame(width: 70, alignment: .leading)
 
-            Text(fileName)
-                .font(.system(.caption2, design: .monospaced).weight(.semibold))
+            Text(value)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
                 .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .contextMenu {
-                    Button("Copy Path") { UIPasteboard.general.string = pathToCopy }
-                    Button("Copy Name") { UIPasteboard.general.string = fileName }
-                }
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
 
-            Spacer(minLength: 0)
+    func factForeground(_ kind: StatusPill.Kind) -> Color {
+        switch kind {
+        case .ok:
+            return NucleusPalette.accentForeground(colorScheme)
+        case .neutral:
+            return Color.primary.opacity(0.84)
+        case .warning:
+            return NucleusPalette.warning
+        case .error:
+            return NucleusPalette.danger
+        }
+    }
+
+    func activityTitleColor(_ phase: NucleusActivityPhase) -> Color {
+        switch phase {
+        case .ready:
+            return .primary
+        case .syncing:
+            return NucleusPalette.accentForeground(colorScheme)
+        case .needsAuthorization:
+            return NucleusPalette.warning
+        case .setup:
+            return .primary
+        case .error:
+            return NucleusPalette.danger
         }
     }
 }

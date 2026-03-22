@@ -1,8 +1,8 @@
 import Foundation
 import CryptoKit
 
-struct StorageStatus: Equatable {
-    enum Backend: String {
+struct StorageStatus: Equatable, Sendable {
+    enum Backend: String, Sendable {
         case icloudDrive = "icloud_drive"
         case localDocuments = "local_documents"
     }
@@ -39,6 +39,7 @@ enum RevisionStorageError: Error, LocalizedError {
 
 final class RevisionStorage: @unchecked Sendable {
     private let fileManager = FileManager.default
+    private static let iCloudContainerIdentifier = "iCloud.com.zhiwenwang.nucleus"
 
     func resolveStatus(preferICloud: Bool = true) throws -> StorageStatus {
         if preferICloud, let url = iCloudDocumentsURL() {
@@ -217,8 +218,17 @@ final class RevisionStorage: @unchecked Sendable {
     }
 
     private func iCloudDocumentsURL() -> URL? {
-        guard let base = fileManager.url(forUbiquityContainerIdentifier: nil) else { return nil }
-        return base.appendingPathComponent("Documents", isDirectory: true)
+        guard let base = fileManager.url(forUbiquityContainerIdentifier: Self.iCloudContainerIdentifier) else {
+            return nil
+        }
+
+        let documentsURL = base.appendingPathComponent("Documents", isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: documentsURL, withIntermediateDirectories: true, attributes: nil)
+            return documentsURL
+        } catch {
+            return nil
+        }
     }
 }
 

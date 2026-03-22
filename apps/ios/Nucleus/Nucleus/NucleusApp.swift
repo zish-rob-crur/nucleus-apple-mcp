@@ -1,4 +1,5 @@
 import SwiftUI
+import BackgroundTasks
 
 @main
 struct NucleusApp: App {
@@ -13,6 +14,9 @@ struct NucleusApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     model.handleScenePhase(newPhase)
                 }
+        }
+        .backgroundTask(.appRefresh(NucleusBackgroundRefresh.identifier)) {
+            await model.handleBackgroundRefreshTask()
         }
     }
 }
