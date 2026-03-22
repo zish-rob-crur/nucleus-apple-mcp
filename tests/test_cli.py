@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 from typer.testing import CliRunner
 
 from nucleus_apple_mcp import cli
 
 runner = CliRunner()
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 
 def test_health_list_sample_catalog_outputs_json() -> None:
@@ -21,12 +23,13 @@ def test_health_list_sample_catalog_outputs_json() -> None:
 
 def test_boolean_flags_use_expected_help_forms() -> None:
     result = runner.invoke(cli.get_app(), ["reminders", "update-reminder", "--help"])
+    help_text = ANSI_ESCAPE_RE.sub("", result.stdout)
 
     assert result.exit_code == 0
-    assert "--completed" in result.stdout
-    assert "--no-completed" in result.stdout
-    assert "--clear-start" in result.stdout
-    assert "--no-clear-start" not in result.stdout
+    assert "--completed" in help_text
+    assert "--no-completed" in help_text
+    assert "--clear-start" in help_text
+    assert "--no-clear-start" not in help_text
 
 
 def test_global_config_option_applies_before_subcommand(monkeypatch) -> None:
