@@ -102,6 +102,98 @@ That matters because the most interesting workflows are no longer limited to a s
 The goal is not to optimize for one model vendor. Claude Code and Codex are obvious examples today,
 but the archive should remain useful even if the surrounding tooling changes.
 
+## Agent workflows to try
+
+The most convincing uses of Nucleus are not isolated queries. They are cross-domain workflows that
+combine schedule, health context, and working notes into something directly useful.
+
+Here are a few examples that fit the current product well.
+
+Under the hood, these workflows are built from a few reusable pieces:
+
+- `nucleus-apple-calendar` for upcoming events and time windows
+- `nucleus-apple-health` for daily metrics, trends, and export history
+- `nucleus-apple-notes` for project notes, prep material, and freeform context
+- `nucleus-apple-reminders` for follow-ups and concrete next actions
+
+That matters because the interesting part is not a single query. It is the composition.
+
+### Morning brief
+
+Prompt:
+
+`Use my calendar, last night's sleep, and my recent notes to draft a realistic plan for today.`
+
+Why it works:
+
+- combines Calendar, Health, and Notes in one pass
+- produces a useful output instead of a raw summary
+- treats Health as planning context, not diagnosis
+
+### Recovery-aware day planning
+
+Prompt:
+
+`If my recovery looks poor today, which meetings should stay fixed, which tasks can move, and what kind of work fits better this afternoon?`
+
+Why it works:
+
+- turns Health trends into planning signal
+- keeps the output practical and low drama
+- shows why agent reasoning needs more than a single app view
+
+### Meeting prep from context
+
+Prompt:
+
+`Prepare me for my 3 PM meeting using the calendar event, related notes, and my current energy context. Keep it brief and action-oriented.`
+
+Why it works:
+
+- very easy to understand as a real-world assistant behavior
+- ties scheduled work to the notes that matter
+- can fold in Health context without overclaiming
+
+### Follow-up planner
+
+Prompt:
+
+`After my last two meetings today, look at the meeting notes, create a short follow-up list, and suggest which reminders should happen today versus later this week based on the rest of my calendar and current energy context.`
+
+Why it works:
+
+- connects Calendar, Notes, Reminders, and Health in one workflow
+- turns captured context into a concrete next-action list
+- shows that Nucleus can support execution, not just reflection
+
+### Weekly review
+
+Prompt:
+
+`Summarize my week across calendar activity, sleep and recovery patterns, and project notes. End with a short next-week adjustment plan.`
+
+Why it works:
+
+- shows the archive value over time, not just in a single day
+- makes the MCP and file model feel more durable
+- produces something a user may actually keep
+
+### Archive query
+
+Prompt:
+
+`Looking at the last three months, when did I sleep best, and what patterns show up in my schedule and notes during those periods?`
+
+Why it works:
+
+- demonstrates long-horizon reasoning over personal data
+- is broader than “health coaching”
+- makes the archive feel like infrastructure, not a one-off export
+
+In all of these cases, the important point is the same: Nucleus is not trying to replace judgment
+with automated medical advice. It is trying to make private personal data legible enough that both
+people and agents can work with it.
+
 ## What Nucleus is not
 
 Nucleus is not an AI health coach.
