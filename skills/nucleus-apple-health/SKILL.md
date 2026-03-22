@@ -25,7 +25,7 @@ metadata:
 
 # Nucleus Apple Health
 
-Use `nucleus-apple health` to query and analyze exported Health data from iCloud Drive or an S3-compatible object store.
+Use `nucleus-apple health` to query and analyze exported Health data from an S3-compatible object store.
 
 ## Setup
 

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+workspace_dir="$(cd -- "$script_dir/.." && pwd)"
+repo_root="$(cd -- "$workspace_dir/../.." && pwd)"
+mode="${NUCLEUS_AGENT_WORKSPACE_CLI_MODE:-local}"
+
+case "$mode" in
+  local)
+    exec uv run --project "$repo_root" nucleus-apple-mcp "$@"
+    ;;
+  pypi)
+    exec uvx --from nucleus-apple-mcp nucleus-apple-mcp "$@"
+    ;;
+  *)
+    echo "Unsupported NUCLEUS_AGENT_WORKSPACE_CLI_MODE: $mode" >&2
+    echo "Expected one of: local, pypi" >&2
+    exit 64
+    ;;
+esac

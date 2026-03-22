@@ -24,10 +24,14 @@
 	<array>
 		<string>com.zhiwenwang.nucleus.refresh</string>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Nucleus needs access to read your Health data to generate daily summaries.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Nucleus uses Health updates to keep your exports current and refresh background sync status. It does not write data back to Health.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIBackgroundModes</key>
