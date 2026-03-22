@@ -108,6 +108,7 @@ The most convincing uses of Nucleus are not isolated queries. They are cross-dom
 combine schedule, health context, and working notes into something directly useful.
 
 Here are a few examples that fit the current product well.
+The inputs can stay simple; the value comes from composition.
 
 Under the hood, these workflows are built from a few reusable pieces:
 
