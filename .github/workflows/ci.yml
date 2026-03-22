@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Run tests
+        run: uv run --with pytest pytest tests/test_cli.py tests/test_agent_workspace.py
+
+      - name: Build distribution artifacts
+        run: uv build
+
+      - name: Smoke test built wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel="$(ls dist/*.whl | head -n1)"
+          uvx --from "$wheel" nucleus-apple --help
+          uvx --from "$wheel" nucleus-apple-mcp --help
