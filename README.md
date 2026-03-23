@@ -7,6 +7,7 @@
 Unlike fragile PyObjC bridges, **Nucleus** uses a hybrid architecture: a Python MCP server that orchestrates lightweight, JIT-compiled native Swift workers. This ensures type-safe, performant, and reliable access to Apple's native APIs while remaining easily distributable via `uvx`.
 
 For a higher-level product overview, see [docs/introducing-nucleus.md](docs/introducing-nucleus.md).
+For the shortest step-by-step setup path, see [docs/getting-started.md](docs/getting-started.md).
 
 ## 🔌 Integrations
 

@@ -49,6 +49,17 @@ Today, that includes:
   <img src="images/introducing-nucleus/settings-storage.jpg" alt="Nucleus storage and settings" width="31%" />
 </p>
 
+## How to get started
+
+If you want to try Nucleus today, the shortest path is:
+
+1. install the iOS app and run the first Health sync
+2. keep the private local archive if you only want on-device use
+3. add an S3-compatible bucket if you want CLI and MCP reads
+4. point `nucleus-apple` and `nucleus-apple-mcp` at that same bucket
+
+The full step-by-step setup guide is here: [docs/getting-started.md](getting-started.md)
+
 ## The interfaces in this repository
 
 This repo is not only the iOS collector.
