@@ -8,6 +8,7 @@ Unlike fragile PyObjC bridges, **Nucleus** uses a hybrid architecture: a Python 
 
 For a higher-level product overview, see [docs/introducing-nucleus.md](docs/introducing-nucleus.md).
 For the shortest step-by-step setup path, see [docs/getting-started.md](docs/getting-started.md).
+Download the iOS app from the App Store: [Nucleus Context Hub](https://apps.apple.com/us/app/nucleus-context-hub/id6760659033).
 
 ## 🔌 Integrations
 

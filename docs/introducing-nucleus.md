@@ -53,6 +53,8 @@ Today, that includes:
 
 If you want to try Nucleus today, the shortest path is:
 
+App Store: [Nucleus Context Hub](https://apps.apple.com/us/app/nucleus-context-hub/id6760659033)
+
 1. install the iOS app and run the first Health sync
 2. keep the private local archive if you only want on-device use
 3. add an S3-compatible bucket if you want CLI and MCP reads

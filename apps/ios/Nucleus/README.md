@@ -2,6 +2,9 @@
 
 本目录是 **Nucleus** 的 iOS 伴生应用（Collector）工程骨架，用于按照 `docs/specs/health.md` 从 HealthKit 采集按天聚合指标，并以“仅追加 revisions”的方式写入应用私有本地存储，并可选上传到 S3 兼容对象存储。
 
+App Store 下载地址：
+[Nucleus Context Hub](https://apps.apple.com/us/app/nucleus-context-hub/id6760659033)
+
 发版策略说明：
 
 - 出于 App Store 审核约束，Nucleus 不再提供“把健康数据同步到 iCloud”这条产品线。

@@ -44,7 +44,9 @@ For most people, Cloudflare R2 is the easiest starting point.
 
 ## 2. Set up the iOS app
 
-1. Install and open `Nucleus` on your iPhone.
+App Store: [Nucleus Context Hub](https://apps.apple.com/us/app/nucleus-context-hub/id6760659033)
+
+1. Install and open `Nucleus Context Hub` on your iPhone.
 2. Grant the Health permissions you want Nucleus to export.
 3. In the app, confirm that storage is set to the default private mode.
 4. Run the first sync once so the initial export is created.
