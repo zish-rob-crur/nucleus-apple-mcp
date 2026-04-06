@@ -60,8 +60,6 @@ App Store: [Nucleus Context Hub](https://apps.apple.com/us/app/nucleus-context-h
 3. add an S3-compatible bucket if you want CLI and MCP reads
 4. point `nucleus-apple` and `nucleus-apple-mcp` at that same bucket
 
-The full step-by-step setup guide is here: [docs/getting-started.md](getting-started.md)
-
 ## The interfaces in this repository
 
 This repo is not only the iOS collector.
