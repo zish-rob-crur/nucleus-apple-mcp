@@ -1,47 +1,44 @@
-# Introducing Nucleus
+# Nucleus: A Private, Agent-Readable Personal Data Archive
 
-Nucleus is a local-first personal data archive for people and agents.
+Personal data should outlive the app that first captured it.
 
-It starts with Apple Health, but the larger idea is broader: personal data should be durable,
-structured, private by default, and usable outside the app that first captured it.
+But that is still not how most software works.
 
-This repository currently contains the MCP server, the export tooling, and the iOS app that make
-that possible.
-
-## Why this exists
-
-Modern agent workflows are getting stronger very quickly.
-
-Claude Code, Codex, OpenCode, and similar tools can reason over files, structured data, and local
-workflows far better than they could even a year ago. But the data layer is still weak. Most
-personal data is trapped inside apps, tied to cloud dashboards, or shaped for UI convenience
-instead of long-term use.
-
-That creates a bad default:
-
-- the user does not really own the data workflow
-- the files are not durable
-- the structure is hard to inspect
-- agents cannot reliably use the data without brittle glue
+As agents get better at reasoning over files, structured data, and local tools, the weakness becomes more obvious: the workflows are getting smarter, while the personal data layer is still trapped inside apps, cloud dashboards, or exports shaped for UI convenience instead of long-term use.
 
 Nucleus is an attempt to fix that.
 
-## The first release
+Nucleus is a local-first personal data archive for people and agents. It starts with Apple Health, but the larger idea is broader: personal data should be durable, structured, private by default, and usable outside the app that first captured it.
 
-The first release focuses on Apple Health.
+This repository currently includes the iOS app, export tooling, CLI, MCP server, and reusable skills that make that possible.
 
-With the user's permission, Nucleus reads HealthKit data and builds stable exports that stay
-private by default. It does not require an account. It does not try to become another hosted sync
-product.
+## Why this exists
+
+Modern agent workflows are improving quickly. Claude Code, Codex, and similar tools can reason over files, structured data, and local workflows far better than they could even a year ago. But most personal data still lives in the wrong shape.
+
+That creates a bad default:
+
+- the user does not really own the workflow around their data
+- the files are not durable
+- the structure is hard to inspect
+- agents can only use the data through brittle glue
+
+Nucleus is meant to produce a better default: a quiet archive that stays private by default, remains legible to a person, and is structured enough for tools.
+
+## What the first release proves
+
+The first release is intentionally narrow. It starts with Apple Health and focuses on doing one thing well: turning private Health data into a stable archive that can leave the app without losing its meaning.
+
+With the user's permission, Nucleus reads HealthKit data and builds exports locally first. It does not require an account. It is not trying to become another hosted sync product.
 
 Today, that includes:
 
-- daily Health exports with predictable structure
+- daily Health exports with a predictable structure
 - raw sample history
 - incremental background refresh
 - Home screen widgets and Live Activity status surfaces
-- optional uploads to a user-owned S3-compatible bucket
-- an MCP and CLI layer that can query the exported data
+- optional upload to a user-owned S3-compatible bucket
+- CLI and MCP reads over the same exported data
 
 <p align="center">
   <img src="images/introducing-nucleus/home-overview.jpg" alt="Nucleus Home overview" width="31%" />
@@ -49,188 +46,138 @@ Today, that includes:
   <img src="images/introducing-nucleus/settings-storage.jpg" alt="Nucleus storage and settings" width="31%" />
 </p>
 
-## How to get started
+## Built for people and agents
 
-If you want to try Nucleus today, the shortest path is:
+Nucleus is not just a utility for exporting files. It is designed to produce an archive that both people and agents can work with.
 
-App Store: [Nucleus Context Hub](https://apps.apple.com/us/app/nucleus-context-hub/id6760659033)
+A person should be able to inspect the files directly. A script should be able to read predictable JSON or JSONL. An MCP client should be able to query summaries, daily metrics, or change history. An agent should be able to reason over the archive as part of a broader task.
 
-1. install the iOS app and run the first Health sync
-2. keep the private local archive if you only want on-device use
-3. add an S3-compatible bucket if you want CLI and MCP reads
-4. point `nucleus-apple` and `nucleus-apple-mcp` at that same bucket
+The goal is not to optimize for one model vendor. Claude Code and Codex are obvious examples today, but the archive should remain useful even if the surrounding tooling changes.
 
-## The interfaces in this repository
+## What Nucleus looks like today
 
-This repo is not only the iOS collector.
-
-It currently exposes Nucleus through several different surfaces:
+Nucleus is currently exposed through several different surfaces:
 
 - the iOS app that collects and exports Apple Health data
 - the `nucleus-apple` CLI
-- the MCP server (`nucleus-apple-mcp`)
-- OpenClaw-ready skills under `skills/`
+- the MCP server, `nucleus-apple-mcp`
+- reusable skills under `skills/`
 
-The CLI and MCP server share the same tool surface. That matters because it makes the archive
-useful in both shell workflows and agent workflows.
+The important part is not just that these surfaces exist. It is that they all point toward the same archive. The CLI and MCP server share the same tool surface, which makes the data useful in both shell workflows and agent workflows.
 
-Example CLI entry points:
+For the current Health export layout, see [docs/specs/health.md](specs/health.md). For reusable agent integrations, see [`skills/`](../skills/).
 
-```bash
-uvx --from nucleus-apple-mcp nucleus-apple health read-daily-metrics --date 2026-03-14 --pretty
-uvx --from nucleus-apple-mcp nucleus-apple health analyze-range --start-date 2026-03-01 --end-date 2026-03-14 --pretty
-uvx --from nucleus-apple-mcp nucleus-apple health list-changes --limit 20 --pretty
-uvx nucleus-apple-mcp
-```
+## How Nucleus works today
 
-The repository also includes reusable skills for:
+The current setup follows a simple order:
 
-- `nucleus-apple-health`
-- `nucleus-apple-notes`
-- `nucleus-apple-reminders`
-- `nucleus-apple-calendar`
+1. the iOS app exports Apple Health into private app storage
+2. the app can optionally upload that export to an S3-compatible object store
+3. the CLI and MCP server read from that object-store copy
 
-That is an important part of the design. Nucleus is not just storing files. It is exposing a
-structured interface that other tools can compose with.
+In other words, Nucleus always starts by creating the archive locally first. Off-device access is an explicit choice, not the default.
 
-For the current health export layout, see [docs/specs/health.md](specs/health.md). For reusable
-agent integrations, see [`skills/`](../skills/).
+The current App Store setup does not use iCloud for Health exports. The agent-readable path today is private local export plus optional object-store upload.
 
-## Built for people and agents
+## Get started
 
-Nucleus is not just a utility for exporting files.
+This is the fastest path from a fresh install to a working Nucleus archive.
 
-It is designed to produce a data layer that both people and agents can work with. The files are
-meant to be durable enough for archival use and structured enough for tool use.
+### 1. Choose your path
 
-That matters because the most interesting workflows are no longer limited to a single app:
+There are two sensible setups today.
 
-- a person may want a private archive they can inspect directly
-- a script may want predictable JSON or JSONL files
-- an MCP client may want range summaries, raw sample inspection, or commit history
-- an agent may want to reason over the archive as part of a larger task
+#### Option A: private local archive only
 
-The goal is not to optimize for one model vendor. Claude Code and Codex are obvious examples today,
-but the archive should remain useful even if the surrounding tooling changes.
+Choose this when the goal is a private export kept on the device by the iOS app.
 
-## Agent workflows to try
+You will get:
 
-The most convincing uses of Nucleus are not isolated queries. They are cross-domain workflows that
-combine schedule, health context, and working notes into something directly useful.
+- local Health export files
+- background refresh inside the app
+- widgets and Live Activity status
 
-Here are a few examples that fit the current product well.
-The inputs can stay simple; the value comes from composition.
+You will not get:
 
-Under the hood, these workflows are built from a few reusable pieces:
+- Health reads from the CLI
+- Health reads from the MCP server
 
-- `nucleus-apple-calendar` for upcoming events and time windows
-- `nucleus-apple-health` for daily metrics, trends, and export history
-- `nucleus-apple-notes` for project notes, prep material, and freeform context
-- `nucleus-apple-reminders` for follow-ups and concrete next actions
+#### Option B: private local archive plus agent-readable object storage
 
-That matters because the interesting part is not a single query. It is the composition.
+Choose this when you want Codex, Claude Code, or another MCP client to read the same exported Health data.
 
-### Morning brief
+You will get:
 
-Prompt:
+- everything in Option A
+- a stable S3-compatible copy of the archive
+- CLI and MCP access to the same exported data
 
-`Use my calendar, last night's sleep, and my recent notes to draft a realistic plan for today.`
+A practical starting point is Cloudflare R2, but any S3-compatible store that works with SigV4 should fit the same layout.
 
-Why it works:
+### 2. Create your first private archive on iPhone
 
-- combines Calendar, Health, and Notes in one pass
-- produces a useful output instead of a raw summary
-- treats Health as planning context, not diagnosis
+App Store: [Nucleus Context Hub](https://apps.apple.com/us/app/nucleus-context-hub/id6760659033)
 
-### Recovery-aware day planning
+1. Install and open `Nucleus Context Hub` on your iPhone.
+2. Grant the Health permissions you want Nucleus to export.
+3. Confirm that storage is set to the default private mode.
+4. Run the first sync once so the initial export is created.
 
-Prompt:
+After this step, Nucleus has created its first private Health export inside app storage. Nothing has been uploaded off-device yet.
 
-`If my recovery looks poor today, which meetings should stay fixed, which tasks can move, and what kind of work fits better this afternoon?`
+For on-device-only use, you can stop here.
 
-Why it works:
+### 3. Create an object-store destination
 
-- turns Health trends into planning signal
-- keeps the output practical and low drama
-- shows why agent reasoning needs more than a single app view
+To get CLI and MCP access, create an S3-compatible bucket.
 
-### Meeting prep from context
+For Cloudflare R2:
 
-Prompt:
+1. Create a bucket for Nucleus exports.
+2. Pick a stable prefix such as `nucleus/`.
+3. Create S3 API credentials scoped to that bucket.
+4. Note these values:
+   - account endpoint
+   - bucket name
+   - access key ID
+   - secret access key
 
-`Prepare me for my 3 PM meeting using the calendar event, related notes, and my current energy context. Keep it brief and action-oriented.`
+R2's S3 endpoint shape is:
 
-Why it works:
+`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
 
-- very easy to understand as a real-world assistant behavior
-- ties scheduled work to the notes that matter
-- can fold in Health context without overclaiming
+Recommended defaults:
 
-### Follow-up planner
+- `region = "auto"`
+- `use_path_style = true`
 
-Prompt:
+This is not a strict requirement. Any S3-compatible store that works with SigV4 should fit the same layout.
 
-`After my last two meetings today, look at the meeting notes, create a short follow-up list, and suggest which reminders should happen today versus later this week based on the rest of my calendar and current energy context.`
+### 4. Connect the iPhone app to the bucket
 
-Why it works:
+In the Nucleus app:
 
-- connects Calendar, Notes, Reminders, and Health in one workflow
-- turns captured context into a concrete next-action list
-- shows that Nucleus can support execution, not just reflection
+1. Open `Settings`.
+2. Open `Object Store`.
+3. Enter the bucket settings.
+4. Save the credentials.
+5. Run another sync.
 
-### Weekly review
+After a successful sync, the bucket should contain the exported Health layout under your chosen prefix, including:
 
-Prompt:
+- `health/daily/...`
+- `health/raw/...`
+- `health/commits/...`
 
-`Summarize my week across calendar activity, sleep and recovery patterns, and project notes. End with a short next-week adjustment plan.`
+At this point, the archive exists in both places: a private on-device copy and an external copy you own and can point tools at.
 
-Why it works:
+### 5. Point the CLI and MCP server at the same archive
 
-- shows the archive value over time, not just in a single day
-- makes the MCP and file model feel more durable
-- produces something a user may actually keep
-
-### Archive query
-
-Prompt:
-
-`Looking at the last three months, when did I sleep best, and what patterns show up in my schedule and notes during those periods?`
-
-Why it works:
-
-- demonstrates long-horizon reasoning over personal data
-- is broader than “health coaching”
-- makes the archive feel like infrastructure, not a one-off export
-
-In all of these cases, the important point is the same: Nucleus is not trying to replace judgment
-with automated medical advice. It is trying to make private personal data legible enough that both
-people and agents can work with it.
-
-## What Nucleus is not
-
-Nucleus is not an AI health coach.
-
-It is not trying to interpret your body for you, generate a wellness personality, or replace
-medical judgment.
-
-It is also not trying to hide your data behind an account-based sync service. The default posture is
-private and local-first. If you want off-device access, you can explicitly connect your own
-S3-compatible storage.
-
-We also removed iCloud as a shipping path for Health data. Apple App Review does not allow apps to
-sync personal health information to iCloud, so that path was removed from the product instead of
-treated as a core feature.
-
-## Configuration and object storage
-
-The collector keeps its local state private by default, but the MCP read path is designed around an
-S3-compatible object store.
-
-The preferred config file is:
+Create:
 
 `~/.config/nucleus-apple-mcp/config.toml`
 
-A minimal Health configuration looks like this:
+Example:
 
 ```toml
 [health]
@@ -257,30 +204,136 @@ Environment variables are also supported:
 - `NUCLEUS_HEALTH_S3_SESSION_TOKEN`
 - `NUCLEUS_HEALTH_S3_USE_PATH_STYLE`
 
-For most people, Cloudflare R2 is a practical starting point. It is S3-compatible, straightforward
-to configure, and fits the current Nucleus model well. The default R2 endpoint shape is
-`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`, and the S3 API region is `auto`.
+For most people, the config file is easier to maintain than environment variables.
 
-Cloudflare's current R2 docs for S3 compatibility and token setup are here:
+### 6. Verify the archive from the terminal
 
-- https://developers.cloudflare.com/r2/api/s3/api/
-- https://developers.cloudflare.com/r2/api/tokens/
+Install the package:
 
-If you use R2, the current recommendation is simple:
+```bash
+uv tool install nucleus-apple-mcp
+```
 
-- create a dedicated bucket for Nucleus exports
-- keep a stable prefix such as `nucleus/`
-- use S3 API credentials scoped to that bucket
-- start with `region = "auto"` and `use_path_style = true`
+Then run a few checks:
 
-This is not a requirement. Any S3-compatible store that works with SigV4 should fit the same
-layout.
+```bash
+nucleus-apple health list-sample-catalog --pretty
+nucleus-apple health read-daily-metrics --date 2026-03-14 --pretty
+nucleus-apple health analyze-range --start-date 2026-03-01 --end-date 2026-03-14 --pretty
+```
+
+If these commands work, the exported archive is readable from the CLI and your storage config is pointing at the same data the iOS app uploaded.
+
+You can also use `uvx` directly:
+
+```bash
+uvx --from nucleus-apple-mcp nucleus-apple health read-daily-metrics --date 2026-03-14 --pretty
+uvx --from nucleus-apple-mcp nucleus-apple health analyze-range --start-date 2026-03-01 --end-date 2026-03-14 --pretty
+uvx --from nucleus-apple-mcp nucleus-apple health list-changes --limit 20 --pretty
+```
+
+### 7. Add Nucleus to your agent
+
+#### Codex CLI
+
+```bash
+codex mcp add nucleus-apple -- uvx nucleus-apple-mcp
+```
+
+#### Claude Code
+
+```bash
+claude mcp add --scope user nucleus-apple -- uvx nucleus-apple-mcp
+```
+
+After that, agent workflows can read the same Health export through the MCP tool surface.
+
+### 8. What to check if data does not appear
+
+If CLI or MCP reads return empty data, check these in order:
+
+1. the iOS app has already completed at least one successful sync
+2. object-store upload is enabled and healthy
+3. the bucket and prefix in `config.toml` match the app settings
+4. the expected `health/` paths exist in the bucket
+5. the requested dates are inside the exported range
+
+## What to try first
+
+The most convincing Nucleus use cases are not isolated queries. They are small cross-domain workflows that combine schedule, health context, and working notes into something directly useful.
+
+Under the hood, those workflows are built from a few reusable pieces:
+
+- `nucleus-apple-health` for daily metrics, trends, and export history
+- `nucleus-apple-calendar` for upcoming events and time windows
+- `nucleus-apple-notes` for project notes, prep material, and freeform context
+- `nucleus-apple-reminders` for follow-ups and concrete next actions
+
+That matters because the interesting part is not a single query. It is the composition.
+
+### Morning brief
+
+Prompt:
+
+`Use my calendar, last night's sleep, and my recent notes to draft a realistic plan for today.`
+
+Why it works:
+
+- it combines Calendar, Health, and Notes in one pass
+- it produces a useful output instead of a raw summary
+- it treats Health as planning context, not diagnosis
+
+### Meeting prep from context
+
+Prompt:
+
+`Prepare me for my 3 PM meeting using the calendar event, related notes, and my current energy context. Keep it brief and action-oriented.`
+
+Why it works:
+
+- it maps cleanly to a real assistant behavior
+- it ties scheduled work to the notes that matter
+- it can fold in Health context without overclaiming
+
+### Weekly review
+
+Prompt:
+
+`Summarize my week across calendar activity, sleep and recovery patterns, and project notes. End with a short next-week adjustment plan.`
+
+Why it works:
+
+- it shows the value of the archive over time, not just on a single day
+- it makes the file model feel durable rather than temporary
+- it produces something a user may actually keep
+
+### Archive query
+
+Prompt:
+
+`Looking at the last three months, when did I sleep best, and what patterns show up in my schedule and notes during those periods?`
+
+Why it works:
+
+- it demonstrates long-horizon reasoning over personal data
+- it is broader than "health coaching"
+- it makes the archive feel like infrastructure, not a one-off export
+
+In all of these cases, the point is the same: Nucleus is not trying to replace judgment with automated medical advice. It is trying to make private personal data legible enough that both people and agents can work with it.
+
+## What Nucleus is not
+
+Nucleus is not an AI health coach.
+
+It is not trying to interpret your body for you, generate a wellness personality, or replace medical judgment.
+
+It is also not trying to hide your data behind an account-based sync service. The default posture is private and local-first. For off-device access, you explicitly connect your own S3-compatible storage.
 
 ## Why open source matters here
 
-This project is easier to trust if the architecture is visible.
+This project is easier to trust when the architecture is visible.
 
-The repo shows the moving parts directly:
+The repository exposes the moving parts directly:
 
 - the Python MCP server
 - the Swift sidecar and native Apple integrations
@@ -288,15 +341,13 @@ The repo shows the moving parts directly:
 - the Health export model and file layout
 - the CLI and skill surface used by agent workflows
 
-Open sourcing the project also makes the product claim more concrete. If Nucleus says it is
-building a durable data layer for people and agents, the repository should make that legible.
+If Nucleus says it is building a durable data layer for people and agents, the repository should make that claim inspectable.
 
 ## Where this can go
 
 Apple Health is only the starting point.
 
-The longer-term direction is a broader personal data archive that can include more domains while
-keeping the same principles:
+The longer-term direction is a broader personal data archive that can include more domains while keeping the same principles:
 
 - local-first
 - private by default
@@ -305,11 +356,9 @@ keeping the same principles:
 - durable files
 - useful to both people and agents
 
-That is the real scope of Nucleus.
+That is the larger scope of Nucleus.
 
-The current release is intentionally narrower. Start with one domain, make the export layer solid,
-make the UX quiet, and make the output useful enough that it can leave the app without losing its
-meaning.
+The current release is intentionally narrower. Start with one domain, make the export layer solid, keep the UX quiet, and make the output useful enough that it can leave the app without losing its meaning.
 
 <p align="center">
   <img src="images/introducing-nucleus/widget-status.jpg" alt="Nucleus home screen widget" width="38%" />
