@@ -1,0 +1,7 @@
+interface:
+  display_name: "Nucleus Notes"
+  short_description: "Manage Apple Notes via nucleus-apple."
+  default_prompt: "Use $nucleus-apple-notes to search Apple Notes, update note content, or manage attachments."
+
+policy:
+  allow_implicit_invocation: true

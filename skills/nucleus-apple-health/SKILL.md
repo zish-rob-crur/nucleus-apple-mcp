@@ -1,56 +1,39 @@
 ---
 name: nucleus-apple-health
-description: Query and analyze exported Apple Health metrics and raw samples via the nucleus-apple CLI. Use when a user wants range summaries, daily metrics, raw Health sample inspection, change history, or diagnostics about gaps between aggregates and raw exports.
-homepage: https://github.com/zish-rob-crur/nucleus-apple-mcp
-metadata:
-  {
-    "openclaw":
-      {
-        "emoji": "❤️",
-        "os": ["darwin"],
-        "requires": { "bins": ["nucleus-apple"] },
-        "install":
-          [
-            {
-              "id": "uv",
-              "kind": "uv",
-              "package": "nucleus-apple-mcp",
-              "bins": ["nucleus-apple"],
-              "label": "Install nucleus-apple (uv)",
-            },
-          ],
-      },
-  }
+description: Query and analyze exported Apple Health metrics and raw samples with the `nucleus-apple` CLI. Use when the task involves trend summaries, daily metrics, raw sample inspection, sync change history, or diagnosing gaps between aggregates and raw exports.
+metadata: {"openclaw":{"emoji":"❤️","homepage":"https://github.com/zish-rob-crur/nucleus-apple-mcp","os":["darwin"],"requires":{"anyBins":["nucleus-apple","uvx"]},"install":[{"id":"uv","kind":"uv","package":"nucleus-apple-mcp","bins":["nucleus-apple"],"label":"Install nucleus-apple (uv)"}]}}
 ---
 
-# Nucleus Apple Health
+Use `nucleus-apple health ...` to summarize exported Health data and drill into raw samples only when needed.
 
-Use `nucleus-apple health` to query and analyze exported Health data from an S3-compatible object store.
+## Operating Stance
 
-## Setup
+- Prefer the installed `nucleus-apple` binary.
+- Fall back to `uvx --from nucleus-apple-mcp nucleus-apple ...` when only `uvx` is available.
+- Start with snapshot-based reads; escalate to raw sample reads only when the task needs record-level evidence or gap diagnosis.
+- Use exact `YYYY-MM-DD` dates and keep ranges as narrow as the question allows.
+- Narrow heavy reads with `metric_keys`, `type_keys`, `tags`, `kinds`, or `max_records`.
+- Treat `missing_dates`, `metric_status`, and raw manifest status as separate signals.
+- Reuse returned cursors when paginating raw reads instead of widening filters.
 
-- Requires `uv` / `uvx` on `PATH`
-- Run commands via: `uvx --from nucleus-apple-mcp nucleus-apple ...`
-- Configure Health export storage through `~/.config/nucleus-apple-mcp/config.toml` or `--config-file`
-- Prefer exact dates in `YYYY-MM-DD`
+## Core Workflow
 
-## Common Commands
+1. If metric vocabulary is unclear, start with `list-sample-catalog`.
+2. Route summary questions through snapshot reads using `references/decision-rules.md`.
+3. Escalate to `inspect-day` before raw samples when the question is "why is this missing or inconsistent?"
+4. Use `references/commands.md` for canonical command shapes.
+5. Use `references/failure-modes.md` to interpret missing data, authorization gaps, and storage errors.
 
-```bash
-uvx --from nucleus-apple-mcp nucleus-apple health list-sample-catalog --pretty
-uvx --from nucleus-apple-mcp nucleus-apple health analyze-range --start-date 2026-01-01 --end-date 2026-03-22 --segment-count 3 --pretty
-uvx --from nucleus-apple-mcp nucleus-apple health read-daily-metrics --date 2026-03-14 --pretty
-uvx --from nucleus-apple-mcp nucleus-apple health read-range-metrics --start-date 2026-03-01 --end-date 2026-03-14 --pretty
-uvx --from nucleus-apple-mcp nucleus-apple health read-samples --start-date 2026-03-14 --tags sleep --max-records 100 --pretty
-uvx --from nucleus-apple-mcp nucleus-apple health read-daily-raw --date 2026-03-14 --type-keys heart_rate --type-keys resting_heart_rate --pretty
-uvx --from nucleus-apple-mcp nucleus-apple health inspect-day --date 2026-03-14 --metric-keys resting_hr_avg --pretty
-uvx --from nucleus-apple-mcp nucleus-apple health list-changes --limit 20 --pretty
-```
+## Task Routing
 
-## Guidance
+- Trend summaries or range overviews: read `references/decision-rules.md#snapshot-routing`.
+- Single-day values or missing-metric diagnosis: read `references/decision-rules.md#daily-and-diagnostic-routing`.
+- Record-level raw samples, workouts, or filtered manifests: read `references/decision-rules.md#raw-escalation` and `references/decision-rules.md#filter-selection`.
+- Recent sync or export changes: read `references/decision-rules.md#change-history`.
+- Unsupported metrics, aggregate-vs-raw gaps, or empty filtered reads: read `references/failure-modes.md`.
 
-- Prefer `analyze-range` for multi-day or trend questions. It uses exported daily snapshots only and avoids raw-sample reads by default.
-- Use `read-daily-metrics` for single-day summaries and `read-samples` or `read-daily-raw` for detailed inspection.
-- Use `inspect-day` when a user asks why a metric is missing or inconsistent.
-- Start with `list-sample-catalog` if the right `type_key`, `tag`, or `metric_key` is unclear.
-- Escalate to raw sample commands only when a user needs anomaly explanation, workout detail, or aggregate/raw diagnosis.
+## Output / Escalation
+
+- Use `--pretty` only for human inspection.
+- Keep raw reads bounded with `--max-records` unless full pagination is explicitly requested.
+- Prefer `inspect-day` over direct raw reads when the task is to explain a missing or inconsistent daily aggregate.

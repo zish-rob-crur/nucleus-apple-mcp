@@ -1,52 +1,38 @@
 ---
 name: nucleus-apple-reminders
-description: Manage Apple Reminders on macOS via the nucleus-apple CLI. Use when a user wants to inspect reminder lists, filter reminders by dates or status, or create, update, complete, and delete reminders that sync through Apple Reminders.
-homepage: https://github.com/zish-rob-crur/nucleus-apple-mcp
-metadata:
-  {
-    "openclaw":
-      {
-        "emoji": "✅",
-        "os": ["darwin"],
-        "requires": { "bins": ["nucleus-apple"] },
-        "install":
-          [
-            {
-              "id": "uv",
-              "kind": "uv",
-              "package": "nucleus-apple-mcp",
-              "bins": ["nucleus-apple"],
-              "label": "Install nucleus-apple (uv)",
-            },
-          ],
-      },
-  }
+description: Manage Apple Reminders on macOS with the `nucleus-apple` CLI. Use when the task involves filtering reminders by due or start dates, listing reminder lists, creating reminders, editing or moving reminders, marking them complete or incomplete, or deleting reminders.
+metadata: {"openclaw":{"emoji":"✅","homepage":"https://github.com/zish-rob-crur/nucleus-apple-mcp","os":["darwin"],"requires":{"anyBins":["nucleus-apple","uvx"]},"install":[{"id":"uv","kind":"uv","package":"nucleus-apple-mcp","bins":["nucleus-apple"],"label":"Install nucleus-apple (uv)"}]}}
 ---
 
-# Nucleus Apple Reminders
+Use `nucleus-apple reminders ...` to inspect and mutate Apple Reminders data.
 
-Use `nucleus-apple reminders` to manage Apple Reminders through EventKit.
+## Operating Stance
 
-## Setup
+- Prefer the installed `nucleus-apple` binary.
+- Fall back to `uvx --from nucleus-apple-mcp nucleus-apple ...` when only `uvx` is available.
+- Prefer exact due or start windows and list filters over broad all-list reads when scope is known.
+- Treat completion as the default state-changing operation; delete only for explicit removal.
+- Read current reminder state before mutating ambiguous titles.
+- Preserve date-only vs datetime semantics from the request.
+- Re-read the affected query after moves, completion changes, and deletes when confirmation matters.
 
-- Requires `uv` / `uvx` on `PATH`
-- Run commands via: `uvx --from nucleus-apple-mcp nucleus-apple ...`
-- macOS only; grant Reminders access when prompted
-- Prefer explicit dates like `2026-03-20` or `2026-03-20T09:00:00+08:00`
+## Core Workflow
 
-## Common Commands
+1. Resolve source or list scope only as far as the task requires.
+2. Inspect reminders with the relevant date and status filters.
+3. Choose create vs update vs complete vs delete from `references/decision-rules.md`.
+4. Use `references/commands.md` for canonical command shapes.
+5. Use `references/failure-modes.md` when date boundaries, hidden lists, or null due or start fields matter.
 
-```bash
-uvx --from nucleus-apple-mcp nucleus-apple reminders list-sources --pretty
-uvx --from nucleus-apple-mcp nucleus-apple reminders list-lists --pretty
-uvx --from nucleus-apple-mcp nucleus-apple reminders list-reminders --due-end 2026-03-20 --status open --pretty
-uvx --from nucleus-apple-mcp nucleus-apple reminders create-reminder --list-id LIST_ID --title "Buy milk" --due 2026-03-20 --pretty
-uvx --from nucleus-apple-mcp nucleus-apple reminders update-reminder --reminder-id REMINDER_ID --completed --pretty
-uvx --from nucleus-apple-mcp nucleus-apple reminders delete-reminder --reminder-id REMINDER_ID
-```
+## Task Routing
 
-## Guidance
+- Due or start filtering, open vs completed views: read `references/decision-rules.md#date-filtering`.
+- Create, edit, or move reminders: read `references/decision-rules.md#mutation-choice`.
+- Mark complete, reopen, or delete: read `references/decision-rules.md#completion-vs-deletion`.
+- Hidden lists, date-only surprises, status ordering, or null date fields: read `references/failure-modes.md`.
 
-- Use `list-lists` first if the target list is not known.
-- Use `list-reminders` with `--status all` when looking for both open and completed items.
-- Mark a reminder complete with `update-reminder --completed true` rather than deleting it unless removal is explicitly requested.
+## Output / Escalation
+
+- Use `--pretty` only for human inspection.
+- Use `--status all` when the user cares about both open and completed reminders.
+- Prefer `--clear-*` or `--no-completed` over reconstructing the full reminder payload.

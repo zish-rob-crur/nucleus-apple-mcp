@@ -1,0 +1,7 @@
+interface:
+  display_name: "Nucleus Reminders"
+  short_description: "Manage Apple Reminders via nucleus-apple."
+  default_prompt: "Use $nucleus-apple-reminders to inspect reminder lists or manage Apple Reminders tasks."
+
+policy:
+  allow_implicit_invocation: true

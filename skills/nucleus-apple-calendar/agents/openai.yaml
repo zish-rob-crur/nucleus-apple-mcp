@@ -1,0 +1,7 @@
+interface:
+  display_name: "Nucleus Calendar"
+  short_description: "Manage Apple Calendar via nucleus-apple."
+  default_prompt: "Use $nucleus-apple-calendar to inspect availability or manage Apple Calendar events."
+
+policy:
+  allow_implicit_invocation: true

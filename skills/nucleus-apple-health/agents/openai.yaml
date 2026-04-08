@@ -1,0 +1,7 @@
+interface:
+  display_name: "Nucleus Health"
+  short_description: "Query Apple Health exports with nucleus-apple."
+  default_prompt: "Use $nucleus-apple-health to summarize Apple Health trends or inspect exported metrics."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,54 +1,38 @@
 ---
 name: nucleus-apple-notes
-description: Manage Apple Notes on macOS via the nucleus-apple CLI. Use when a user wants to list folders, search notes, fetch note bodies, create or update notes, and manage note attachments from the terminal.
-homepage: https://github.com/zish-rob-crur/nucleus-apple-mcp
-metadata:
-  {
-    "openclaw":
-      {
-        "emoji": "📝",
-        "os": ["darwin"],
-        "requires": { "bins": ["nucleus-apple"] },
-        "install":
-          [
-            {
-              "id": "uv",
-              "kind": "uv",
-              "package": "nucleus-apple-mcp",
-              "bins": ["nucleus-apple"],
-              "label": "Install nucleus-apple (uv)",
-            },
-          ],
-      },
-  }
+description: Manage Apple Notes on macOS with the `nucleus-apple` CLI. Use when the task involves searching notes, scoping by account or folder, reading note bodies, creating notes, appending or replacing note content, or adding and exporting note attachments.
+metadata: {"openclaw":{"emoji":"📝","homepage":"https://github.com/zish-rob-crur/nucleus-apple-mcp","os":["darwin"],"requires":{"anyBins":["nucleus-apple","uvx"]},"install":[{"id":"uv","kind":"uv","package":"nucleus-apple-mcp","bins":["nucleus-apple"],"label":"Install nucleus-apple (uv)"}]}}
 ---
 
-# Nucleus Apple Notes
+Use `nucleus-apple notes ...` to search, read, update, and attach files to Apple Notes data.
 
-Use `nucleus-apple notes` to work with Apple Notes from the terminal.
+## Operating Stance
 
-## Setup
+- Prefer the installed `nucleus-apple` binary.
+- Fall back to `uvx --from nucleus-apple-mcp nucleus-apple ...` when only `uvx` is available.
+- Narrow search by folder or account when that scope is already known.
+- Read the note before destructive rewrites, attachment export, or ambiguous updates.
+- Prefer append operations for incremental edits; use destructive set operations only for explicit replacement or format conversion.
+- Include shared or recently deleted content only when the task explicitly asks for it.
+- Re-read the note after destructive writes or attachment changes when follow-up actions depend on current content.
 
-- Requires `uv` / `uvx` on `PATH`
-- Run commands via: `uvx --from nucleus-apple-mcp nucleus-apple ...`
-- macOS only; grant Notes automation access when prompted
-- Use `--pretty` when inspecting nested note or attachment payloads
+## Core Workflow
 
-## Common Commands
+1. Resolve account, folder, or note scope only as far as the task requires.
+2. Inspect current note state before risky edits or attachment work.
+3. Choose create vs append vs destructive set from `references/decision-rules.md`.
+4. Use `references/commands.md` for canonical command shapes.
+5. Use `references/failure-modes.md` when notes are locked, shared, or still ambiguous after search.
 
-```bash
-uvx --from nucleus-apple-mcp nucleus-apple notes list-accounts --pretty
-uvx --from nucleus-apple-mcp nucleus-apple notes list-folders --pretty
-uvx --from nucleus-apple-mcp nucleus-apple notes list-notes --query project --include-plaintext-excerpt --pretty
-uvx --from nucleus-apple-mcp nucleus-apple notes get-note --note-id NOTE_ID --include-body-html --pretty
-uvx --from nucleus-apple-mcp nucleus-apple notes create-note --title "Meeting notes" --markdown "- agenda\\n- decisions" --pretty
-uvx --from nucleus-apple-mcp nucleus-apple notes update-note --note-id NOTE_ID --append-plaintext "Follow-up item" --pretty
-uvx --from nucleus-apple-mcp nucleus-apple notes add-attachment --note-id NOTE_ID --attach-file /tmp/file.pdf --pretty
-uvx --from nucleus-apple-mcp nucleus-apple notes save-attachment --attachment-id ATTACHMENT_ID --output-path /tmp/exported.pdf --pretty
-```
+## Task Routing
 
-## Guidance
+- Search by text, folder, or note ID: read `references/decision-rules.md#scope-and-search`.
+- Choose append vs replace body: read `references/decision-rules.md#mutation-choice`.
+- Export or add attachments: read `references/decision-rules.md#attachment-workflow`.
+- Locked notes, shared notes, expensive plaintext search, or rewrite risk: read `references/failure-modes.md`.
 
-- Use `list-folders` or `list-notes` first if the target note identifier is unknown.
-- `update-note` requires `--allow-destructive` when using `--set-plaintext` or `--set-markdown`.
-- `get-note` defaults to plaintext plus attachments; disable fields explicitly when a smaller payload is preferable.
+## Output / Escalation
+
+- Use `--pretty` for human inspection.
+- Use `--include-body-html` only when formatting or embedded attachment anchors matter.
+- Use `--allow-destructive` only alongside `--set-plaintext` or `--set-markdown`.

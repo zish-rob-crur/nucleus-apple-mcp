@@ -1,52 +1,37 @@
 ---
 name: nucleus-apple-calendar
-description: Manage Apple Calendar on macOS via the nucleus-apple CLI. Use when a user wants to list calendars, inspect availability, search events in a time range, or create, update, and delete Calendar events.
-homepage: https://github.com/zish-rob-crur/nucleus-apple-mcp
-metadata:
-  {
-    "openclaw":
-      {
-        "emoji": "📅",
-        "os": ["darwin"],
-        "requires": { "bins": ["nucleus-apple"] },
-        "install":
-          [
-            {
-              "id": "uv",
-              "kind": "uv",
-              "package": "nucleus-apple-mcp",
-              "bins": ["nucleus-apple"],
-              "label": "Install nucleus-apple (uv)",
-            },
-          ],
-      },
-  }
+description: Manage Apple Calendar on macOS with the `nucleus-apple` CLI. Use when the task involves checking availability, listing event windows, creating events, editing one event or future recurring events, moving events across calendars, or deleting Calendar events.
+metadata: {"openclaw":{"emoji":"📅","homepage":"https://github.com/zish-rob-crur/nucleus-apple-mcp","os":["darwin"],"requires":{"anyBins":["nucleus-apple","uvx"]},"install":[{"id":"uv","kind":"uv","package":"nucleus-apple-mcp","bins":["nucleus-apple"],"label":"Install nucleus-apple (uv)"}]}}
 ---
 
-# Nucleus Apple Calendar
+Use `nucleus-apple calendar ...` to inspect, schedule, and mutate Apple Calendar data.
 
-Use `nucleus-apple calendar` to work with Apple Calendar through EventKit.
+## Operating Stance
 
-## Setup
+- Prefer the installed `nucleus-apple` binary.
+- Fall back to `uvx --from nucleus-apple-mcp nucleus-apple ...` when only `uvx` is available.
+- Keep reads narrow: exact time windows first, source or calendar filters when provider choice matters.
+- Default recurring edits to `--span this`; widen to `--span future` only for explicit series changes.
+- Preserve explicit timezone offsets from the request.
+- Re-read the affected window after mutations that can change IDs or recurrence scope.
 
-- Requires `uv` / `uvx` on `PATH`
-- Run commands via: `uvx --from nucleus-apple-mcp nucleus-apple ...`
-- macOS only; grant Calendar access when prompted
-- Prefer exact ISO 8601 datetimes when filtering or creating events
+## Core Workflow
 
-## Common Commands
+1. Resolve source or calendar scope only as far as the task requires.
+2. Inspect the smallest event window that can answer the question or identify the target event.
+3. Choose the mutation path from `references/decision-rules.md`.
+4. Use `references/commands.md` for canonical command shapes.
+5. Use `references/failure-modes.md` when results are ambiguous or a writable target is unclear.
 
-```bash
-uvx --from nucleus-apple-mcp nucleus-apple calendar list-sources --pretty
-uvx --from nucleus-apple-mcp nucleus-apple calendar list-calendars --pretty
-uvx --from nucleus-apple-mcp nucleus-apple calendar list-events --start 2026-03-15T09:00:00+08:00 --end 2026-03-15T18:00:00+08:00 --include-details --pretty
-uvx --from nucleus-apple-mcp nucleus-apple calendar create-event --calendar-id CALENDAR_ID --title "Design review" --start 2026-03-15T14:00:00+08:00 --end 2026-03-15T15:00:00+08:00 --pretty
-uvx --from nucleus-apple-mcp nucleus-apple calendar update-event --event-id EVENT_ID --title "Updated title" --pretty
-uvx --from nucleus-apple-mcp nucleus-apple calendar delete-event --event-id EVENT_ID
-```
+## Task Routing
 
-## Guidance
+- Availability or "what is on my calendar" questions: read `references/decision-rules.md#inspection-rules`.
+- Single-event create, edit, move, or delete: read `references/decision-rules.md#mutation-rules`.
+- Recurring-series edits, timezone-sensitive requests, or all-day changes: read `references/decision-rules.md#recurring-and-time-rules`.
+- Duplicate titles, read-only calendars, hidden calendars, or post-edit identifier churn: read `references/failure-modes.md`.
 
-- Run `list-calendars` before creating or moving events if the calendar identifier is unknown.
-- Use `--include-details` on `list-events` when location, notes, or URL matter.
-- Use explicit timezone offsets in datetimes to avoid ambiguity.
+## Output / Escalation
+
+- Use `--pretty` only for human inspection.
+- Omit `--pretty` when another tool or script will parse the JSON.
+- Add `--include-details` only when the task depends on location, notes, URL, or event disambiguation.
