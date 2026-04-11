@@ -71,7 +71,7 @@ nucleus-apple notes list-notes --query project --include-plaintext-excerpt --pre
 nucleus-apple health read-daily-metrics --date 2026-03-14 --pretty
 ```
 
-The CLI mirrors the MCP tool surface and emits JSON, which makes it suitable for shell automation and OpenClaw-style skills.
+The CLI mirrors the MCP tool surface and emits JSON, which makes it suitable for shell automation and agent skill workflows.
 
 ## 🔧 Add as an MCP server
 
@@ -103,13 +103,19 @@ You can also launch the server through the CLI:
 nucleus-apple mcp serve
 ```
 
-## 🪝 OpenClaw Skills
+## 🪝 OpenClaw + Hermes Agent Skills
 
-This repository includes OpenClaw-ready skills under `skills/` for:
+This repository includes reusable agent skills under `skills/` for:
 
 * `nucleus-apple-calendar`
 * `nucleus-apple-reminders`
 * `nucleus-apple-notes`
 * `nucleus-apple-health`
 
-Each skill depends on the `nucleus-apple` binary and is designed to be contributed upstream without changing the command surface.
+Each skill depends on the `nucleus-apple` binary and is designed to be reused without changing the command surface.
+
+If your agent supports repo-based skill install via chat, you can say:
+
+```text
+install skill https://github.com/zish-rob-crur/nucleus-apple-mcp nucleus-apple-health
+```
