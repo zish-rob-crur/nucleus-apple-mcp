@@ -54,6 +54,12 @@ A person should be able to inspect the files directly. A script should be able t
 
 The goal is not to optimize for one model vendor. Claude Code and Codex are obvious examples today, but the archive should remain useful even if the surrounding tooling changes.
 
+A simple terminal + MCP workflow can look like this:
+
+<p align="center">
+  <img src="images/introducing-nucleus/terminal-mcp-demo.gif" alt="Terminal and MCP demo of Nucleus summarizing a 30-day recovery trend from exported Health data" width="92%" />
+</p>
+
 ## What Nucleus looks like today
 
 Nucleus is currently exposed through several different surfaces:

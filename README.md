@@ -9,6 +9,14 @@ Unlike fragile PyObjC bridges, **Nucleus** uses a hybrid architecture: a Python 
 For a product overview and setup path, see [docs/introducing-nucleus.md](docs/introducing-nucleus.md).
 Download the iOS app from the App Store: [Nucleus Context Hub](https://apps.apple.com/us/app/nucleus-context-hub/id6760659033).
 
+<p align="center">
+  <img src="docs/images/introducing-nucleus/terminal-mcp-demo.gif" alt="Terminal and MCP demo of Nucleus summarizing a 30-day recovery trend from exported Health data" width="100%" />
+</p>
+
+<p align="center">
+  <em>Terminal + MCP demo: Nucleus summarizes a 30-day recovery trend from exported Health data.</em>
+</p>
+
 ## 🔌 Integrations
 
 ### ✅ Available (current release)
