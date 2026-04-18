@@ -401,6 +401,13 @@ final class AppModel: ObservableObject {
                 lastError = error.localizedDescription
                 publishActivitySnapshot()
                 log(.error, "Sync failed: \(error.localizedDescription)")
+
+                if PendingBackgroundSyncStore.load() != nil {
+                    scheduleBackgroundRefresh(
+                        after: NucleusBackgroundRefresh.retryDelay,
+                        reason: "sync retry"
+                    )
+                }
             }
 
             log(.info, "Sync finished.")
@@ -424,7 +431,7 @@ final class AppModel: ObservableObject {
                 _ = await self.processPendingBackgroundSyncIfPossible()
             }
         case .background:
-            scheduleBackgroundRefresh()
+            scheduleBackgroundRefresh(reason: "app backgrounded")
         default:
             break
         }
@@ -460,6 +467,10 @@ final class AppModel: ObservableObject {
         pendingObserverTypeKeys.insert(event.typeKey)
         PendingBackgroundSyncStore.save(typeKeys: pendingObserverTypeKeys.sorted())
         beginObserverBackgroundTaskIfNeeded()
+        scheduleBackgroundRefresh(
+            after: NucleusBackgroundRefresh.retryDelay,
+            reason: "observer delivery"
+        )
         log(.info, "Health observer fired for \(event.typeKey).")
 
         if isSyncing {
@@ -512,6 +523,10 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 self.log(.error, "Background HealthKit delivery expired before sync completed.")
+                self.scheduleBackgroundRefresh(
+                    after: NucleusBackgroundRefresh.retryDelay,
+                    reason: "observer delivery expired"
+                )
                 self.completePendingObserverEvents()
             }
         }
@@ -679,7 +694,8 @@ final class AppModel: ObservableObject {
     }
 
     func handleBackgroundRefreshTask() async {
-        defer { scheduleBackgroundRefresh() }
+        NucleusBackgroundRefresh.markTaskLaunched()
+        defer { scheduleBackgroundRefresh(reason: "background refresh completed") }
 
         await waitForBootstrapIfNeeded()
         guard !Task.isCancelled else { return }
@@ -701,9 +717,15 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func scheduleBackgroundRefresh() {
+    private func scheduleBackgroundRefresh(
+        after delay: TimeInterval = NucleusBackgroundRefresh.defaultDelay,
+        reason: String
+    ) {
         do {
-            try NucleusBackgroundRefresh.schedule()
+            let didSchedule = try NucleusBackgroundRefresh.schedule(after: delay)
+            if didSchedule {
+                log(.info, "Scheduled background refresh in ~\(Self.backgroundDelayLabel(delay)) (\(reason)).")
+            }
         } catch {
             log(.error, "Unable to schedule background refresh: \(error.localizedDescription)")
         }
@@ -930,6 +952,11 @@ final class AppModel: ObservableObject {
     private static let initialSyncCompletedKey = "nucleus.initial_sync_completed"
     private static let foregroundRefreshInterval: TimeInterval = 3
     private static let maxBackgroundCatchUpDays = 3
+
+    private static func backgroundDelayLabel(_ delay: TimeInterval) -> String {
+        let roundedMinutes = Int((max(delay, 60) / 60).rounded(.up))
+        return roundedMinutes <= 1 ? "1m" : "\(roundedMinutes)m"
+    }
 }
 
 private enum StorageResolution: Sendable {

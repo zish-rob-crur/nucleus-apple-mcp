@@ -116,6 +116,11 @@ struct PendingBackgroundSyncRequest: Codable, Equatable, Sendable {
     let typeKeys: [String]
 }
 
+struct ScheduledBackgroundRefreshRequest: Codable, Equatable, Sendable {
+    let scheduledAt: Date
+    let earliestBeginAt: Date
+}
+
 enum PendingBackgroundSyncStore {
     private static let defaultsKey = "nucleus.pending_background_sync_request"
 
@@ -143,15 +148,59 @@ enum PendingBackgroundSyncStore {
     }
 }
 
+enum ScheduledBackgroundRefreshStore {
+    private static let defaultsKey = "nucleus.background_refresh_request"
+
+    static func load() -> ScheduledBackgroundRefreshRequest? {
+        guard
+            let data = UserDefaults.standard.data(forKey: defaultsKey),
+            let request = try? JSONDecoder().decode(ScheduledBackgroundRefreshRequest.self, from: data)
+        else {
+            return nil
+        }
+        return request
+    }
+
+    static func save(scheduledAt: Date, earliestBeginAt: Date) {
+        let request = ScheduledBackgroundRefreshRequest(
+            scheduledAt: scheduledAt,
+            earliestBeginAt: earliestBeginAt
+        )
+        guard let data = try? JSONEncoder().encode(request) else { return }
+        UserDefaults.standard.set(data, forKey: defaultsKey)
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: defaultsKey)
+    }
+}
+
 enum NucleusBackgroundRefresh {
     static let identifier = "com.zhiwenwang.nucleus.refresh"
-    private static let minimumDelay: TimeInterval = 15 * 60
+    static let defaultDelay: TimeInterval = 15 * 60
+    static let retryDelay: TimeInterval = 2 * 60
+    private static let minimumDelay: TimeInterval = 60
 
-    static func schedule(after delay: TimeInterval = minimumDelay) throws {
+    @discardableResult
+    static func schedule(after delay: TimeInterval = defaultDelay, now: Date = Date()) throws -> Bool {
+        let earliestBeginAt = now.addingTimeInterval(max(delay, minimumDelay))
+
+        if let existing = ScheduledBackgroundRefreshStore.load(),
+           existing.earliestBeginAt > now,
+           existing.earliestBeginAt <= earliestBeginAt {
+            return false
+        }
+
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
         let request = BGAppRefreshTaskRequest(identifier: identifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: max(delay, minimumDelay))
+        request.earliestBeginDate = earliestBeginAt
         try BGTaskScheduler.shared.submit(request)
+        ScheduledBackgroundRefreshStore.save(scheduledAt: now, earliestBeginAt: earliestBeginAt)
+        return true
+    }
+
+    static func markTaskLaunched() {
+        ScheduledBackgroundRefreshStore.clear()
     }
 }
 

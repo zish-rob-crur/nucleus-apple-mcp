@@ -135,16 +135,16 @@ _SAMPLE_CATALOG: tuple[_SampleTypeCatalogEntry, ...] = (
         description="Respiratory rate samples.",
         unit="brpm",
         related_metric_keys=("respiratory_rate_avg",),
-        aggregate_hint="average_per_day",
+        aggregate_hint="overlap_weighted_average_per_day",
     ),
     _SampleTypeCatalogEntry(
         type_key="apple_sleeping_wrist_temperature",
         kind=HealthSampleKind.quantity,
         tags=(HealthSampleTag.sleep, HealthSampleTag.body),
-        description="Sleeping wrist temperature samples.",
-        unit="°C",
+        description="Sleeping wrist temperature delta-from-baseline samples.",
+        unit="Δ°C",
         related_metric_keys=("wrist_temperature_celsius",),
-        aggregate_hint="average_per_day",
+        aggregate_hint="overlap_weighted_average_per_day",
     ),
     _SampleTypeCatalogEntry(
         type_key="body_mass",
@@ -280,15 +280,15 @@ _METRIC_SOURCE_CATALOG: dict[str, _MetricSourceCatalogEntry] = {
         metric_key="respiratory_rate_avg",
         source_model="raw_aggregate",
         related_type_keys=("respiratory_rate",),
-        aggregate_hint="average_per_day",
-        description="Daily average respiratory rate.",
+        aggregate_hint="overlap_weighted_average_per_day",
+        description="Daily overlap-weighted average respiratory rate.",
     ),
     "wrist_temperature_celsius": _MetricSourceCatalogEntry(
         metric_key="wrist_temperature_celsius",
         source_model="raw_aggregate",
         related_type_keys=("apple_sleeping_wrist_temperature",),
-        aggregate_hint="average_per_day",
-        description="Daily average sleeping wrist temperature.",
+        aggregate_hint="overlap_weighted_average_per_day",
+        description="Daily overlap-weighted sleeping wrist temperature delta from baseline.",
     ),
     "body_mass_kg": _MetricSourceCatalogEntry(
         metric_key="body_mass_kg",
@@ -1556,7 +1556,9 @@ def _metric_value_is_plausible(snapshot: dict[str, Any], metric_key: str, value:
         return 20 <= value <= 300
     if metric_key == "blood_glucose_mg_dl":
         return 20 <= value <= 500
-    if metric_key in {"wrist_temperature_celsius", "body_temperature_celsius", "basal_body_temperature_celsius"}:
+    if metric_key == "wrist_temperature_celsius":
+        return -10 <= value <= 10
+    if metric_key in {"body_temperature_celsius", "basal_body_temperature_celsius"}:
         return 25 <= value <= 45
     return True
 

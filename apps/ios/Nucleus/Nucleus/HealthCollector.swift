@@ -191,14 +191,14 @@ final class HealthCollector: @unchecked Sendable {
             transform: Self.percentValue
         )
 
-        let respiratoryRate = await metricForAverage(
+        let respiratoryRate = await metricForOverlapWeightedAverage(
             typeIdentifier: .respiratoryRate,
             unit: Self.respiratoryRateUnit,
             key: .respiratoryRateAvg,
             day: dayWindow
         )
 
-        let wristTemperature = await metricForAverage(
+        let wristTemperature = await metricForOverlapWeightedAverage(
             typeIdentifier: .appleSleepingWristTemperature,
             unit: Self.temperatureUnit,
             key: .wristTemperatureCelsius,
@@ -777,6 +777,25 @@ final class HealthCollector: @unchecked Sendable {
         )
     }
 
+    private func metricForOverlapWeightedAverage(
+        typeIdentifier: HKQuantityTypeIdentifier,
+        unit: HKUnit,
+        key: MetricKey,
+        day: DayWindow,
+        transform: @escaping (Double) -> Double = { $0 }
+    ) async -> MetricResult {
+        guard let type = HKQuantityType.quantityType(forIdentifier: typeIdentifier) else {
+            return MetricResult(value: nil, status: .unsupported, unit: key.unitString)
+        }
+        return await queryOverlapWeightedAverage(
+            type: type,
+            unit: unit,
+            unitString: key.unitString,
+            day: day,
+            transform: transform
+        )
+    }
+
     private func metricForLatest(
         typeIdentifier: HKQuantityTypeIdentifier,
         unit: HKUnit,
@@ -1161,6 +1180,68 @@ final class HealthCollector: @unchecked Sendable {
             }
 
             return MetricResult(value: transform(quantity.doubleValue(for: unit)), status: .ok, unit: unitString)
+        } catch {
+            if let status = Self.mapToMetricStatus(error) {
+                return MetricResult(value: nil, status: status, unit: unitString)
+            }
+            return MetricResult(value: nil, status: .unauthorized, unit: unitString)
+        }
+    }
+
+    private func queryOverlapWeightedAverage(
+        type: HKQuantityType,
+        unit: HKUnit,
+        unitString: String,
+        day: DayWindow,
+        transform: @escaping (Double) -> Double = { $0 }
+    ) async -> MetricResult {
+        let predicate = HKQuery.predicateForSamples(withStart: day.start, end: day.end, options: [])
+
+        do {
+            let samples: [HKQuantitySample] = try await sampleQuery(
+                type: type,
+                predicate: predicate,
+                sortDescriptors: [
+                    NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true),
+                    NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: true),
+                ]
+            )
+
+            guard !samples.isEmpty else {
+                return MetricResult(value: nil, status: .no_data, unit: unitString)
+            }
+
+            var weightedTotal = 0.0
+            var totalWeight = 0.0
+
+            for sample in samples {
+                let overlapStart = max(day.start, sample.startDate)
+                let overlapEnd = min(day.end, sample.endDate)
+                var weight = overlapEnd.timeIntervalSince(overlapStart)
+
+                // Sleep-derived HealthKit samples can span midnight, while some
+                // instantaneous samples report start == end. Keep both cases.
+                if weight <= 0,
+                   sample.startDate >= day.start,
+                   sample.startDate < day.end {
+                    weight = 1
+                }
+
+                guard weight > 0 else { continue }
+
+                weightedTotal += sample.quantity.doubleValue(for: unit) * weight
+                totalWeight += weight
+            }
+
+            guard totalWeight > 0 else {
+                return MetricResult(value: nil, status: .no_data, unit: unitString)
+            }
+
+            return MetricResult(
+                value: transform(weightedTotal / totalWeight),
+                status: .ok,
+                unit: unitString
+            )
         } catch {
             if let status = Self.mapToMetricStatus(error) {
                 return MetricResult(value: nil, status: status, unit: unitString)

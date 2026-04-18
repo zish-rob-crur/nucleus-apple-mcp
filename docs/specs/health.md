@@ -43,6 +43,12 @@ For sample-based HealthKit types, the iOS collector also registers `HKObserverQu
 - Daily aggregate metrics such as activity summary are still recomputed per affected date; they are not delivered as a standalone observer stream.
 - Background delivery is best-effort. It should be treated as an automatic sync trigger, not as a durability boundary; the durable cursor remains the exported `commit_id`.
 
+Sleep-derived quantity metrics use overlap-aware aggregation:
+
+- `respiratory_rate_avg` and `wrist_temperature_celsius` are computed from quantity samples that intersect the calendar day, not only samples fully contained inside it.
+- This avoids dropping overnight samples that cross midnight, which is common for sleep-derived HealthKit data.
+- `wrist_temperature_celsius` is a historical schema name. The value is a delta from the user’s sleeping wrist-temperature baseline, not an absolute body or skin temperature. Exported units should be interpreted as `Δ°C`.
+
 ## 3. Storage Layout
 
 All health artifacts live under:
@@ -132,6 +138,11 @@ Current metric keys may include:
 - `sleep_asleep_minutes`
 - `sleep_in_bed_minutes`
 
+Notes:
+
+- `respiratory_rate_avg` is exported as an overlap-weighted daily average from raw `respiratory_rate` samples.
+- `wrist_temperature_celsius` is exported from raw `apple_sleeping_wrist_temperature` samples as an overlap-weighted daily average delta from baseline, not as an absolute Celsius temperature.
+
 Example:
 
 ```json
@@ -214,6 +225,8 @@ Current raw type keys may include:
 - `basal_body_temperature`
 - `sleep_analysis`
 - `workout`
+
+`apple_sleeping_wrist_temperature` raw values represent deltas from a personal baseline, so downstream readers should treat their units as `Δ°C`.
 
 Example:
 
