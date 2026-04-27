@@ -1,3 +1,5 @@
+[中文版](README.zh-CN.md)
+
 # ⚛️ Nucleus: macOS Life Context Server
 
 **Give your AI Agent a Hippocampus.**
