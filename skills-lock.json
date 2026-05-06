@@ -291,6 +291,12 @@
       "sourceType": "github",
       "computedHash": "74c3da2596b80f786269d35ac8c50b77a8d1899c47b42564c2a548180e6242ff"
     },
+    "swift-concurrency-expert": {
+      "source": "dimillian/skills",
+      "sourceType": "github",
+      "skillPath": "swift-concurrency-expert/SKILL.md",
+      "computedHash": "638744d687dfc9fdde7a14f5496b053f409c7bc1b26c13a4a3c39cb0afb398f9"
+    },
     "swift-language": {
       "source": "dpearson2699/swift-ios-skills",
       "sourceType": "github",
@@ -311,6 +317,12 @@
       "sourceType": "github",
       "computedHash": "c81319a0dd62193af8d5d6b013d6372088a116af0bc56ed36b35769904b62d7e"
     },
+    "swiftui-expert-skill": {
+      "source": "avdlee/swiftui-agent-skill",
+      "sourceType": "github",
+      "skillPath": "swiftui-expert-skill/SKILL.md",
+      "computedHash": "9db9a694b7354dea993bff22d038bc39e4d64b28a9c598b84793f2e1153db1cb"
+    },
     "swiftui-gestures": {
       "source": "dpearson2699/swift-ios-skills",
       "sourceType": "github",
@@ -322,9 +334,10 @@
       "computedHash": "8e2bc0a37f88be13195ac490b3b72996dc83bf57f316527f37a13482e7154073"
     },
     "swiftui-liquid-glass": {
-      "source": "dpearson2699/swift-ios-skills",
+      "source": "dimillian/skills",
       "sourceType": "github",
-      "computedHash": "8c0f7527612bb1a2d45302dc91938cdd6bc127a4b565b066526b75659f7b81d4"
+      "skillPath": "swiftui-liquid-glass/SKILL.md",
+      "computedHash": "e4d3634171bc6caa7cc8d15f58cd2fb848dab4744493edc56ec14f4b2c8521a0"
     },
     "swiftui-navigation": {
       "source": "dpearson2699/swift-ios-skills",
@@ -334,22 +347,31 @@
     "swiftui-patterns": {
       "source": "dpearson2699/swift-ios-skills",
       "sourceType": "github",
-      "computedHash": "7fc62c992ba43c133e55373f8d80db96d4207a2767e80a387f8a99ef8fa7f9ae"
+      "skillPath": "skills/swiftui-patterns/SKILL.md",
+      "computedHash": "a93e68f6ace1a1fece49780575f9852f01975ae0d019b284a5466a417446ab98"
     },
     "swiftui-performance": {
       "source": "dpearson2699/swift-ios-skills",
       "sourceType": "github",
-      "computedHash": "424bd658ad0fefd629d5759a0f3ce885533e4f3250b7c82068be3a28e5f91ad1"
+      "skillPath": "skills/swiftui-performance/SKILL.md",
+      "computedHash": "09514403c82a0d2211b417c50812ed36e23f1f7a99e789aa0ca24d8b52e30ff7"
     },
     "swiftui-pro": {
       "source": "twostraws/swiftui-agent-skill",
       "sourceType": "github",
-      "computedHash": "ce653d19fd00a4874489003025e9235be542e7134ff3c543e20afeb53fc3bc9a"
+      "skillPath": "swiftui-pro/SKILL.md",
+      "computedHash": "07033426e384295a4b49cf0b2ffdefd4098cae4af53fef16bc1f2d9281118c41"
     },
     "swiftui-uikit-interop": {
       "source": "dpearson2699/swift-ios-skills",
       "sourceType": "github",
       "computedHash": "a44fa2f893097ac9d3174cbb0862deea6fae3663d2fee9ce6c397cb8e453539e"
+    },
+    "swiftui-view-refactor": {
+      "source": "dimillian/skills",
+      "sourceType": "github",
+      "skillPath": "swiftui-view-refactor/SKILL.md",
+      "computedHash": "eefd3e1e72a17ca627f8e50fce173efafaa23eb66515f562f4b5fca88325cb33"
     },
     "teach-impeccable": {
       "source": "pbakaus/impeccable",

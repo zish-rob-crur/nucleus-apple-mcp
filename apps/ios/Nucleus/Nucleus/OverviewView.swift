@@ -29,7 +29,7 @@ struct OverviewView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
-            .padding(.bottom, 14)
+            .padding(.bottom, NucleusStyle.floatingTabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.hidden)
@@ -204,7 +204,7 @@ private extension OverviewView {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(NucleusButtonStyle(kind: model.authRequestStatus == .shouldRequest ? .secondary : .primary))
-                .disabled(model.isSyncing || model.isBootstrapping)
+                .disabled(!model.canStartManualSync)
 
                 Text(syncSummaryText)
                     .font(.system(.footnote, design: .rounded))

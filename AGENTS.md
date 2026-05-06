@@ -37,6 +37,7 @@ If you add tests, use `pytest` and place them under a top-level `tests/` directo
 
 ## Commit & Pull Request Guidelines
 
+- All documentation updates (including README.md and AGENTS.md) and commit messages MUST be written in English.
 - Commit messages follow Conventional Commits (examples in history: `fix: …`, `chore: …`).
 - PRs should include: a short summary, the exact test commands you ran, macOS version, and any new privacy/permission implications (EventKit reads/writes). Link related issues when applicable.
 

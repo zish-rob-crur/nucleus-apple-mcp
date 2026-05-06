@@ -26,7 +26,7 @@ struct SyncView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
-            .padding(.bottom, 14)
+            .padding(.bottom, NucleusStyle.floatingTabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.hidden)
@@ -181,7 +181,7 @@ private extension SyncView {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(NucleusButtonStyle(kind: .primary))
-                .disabled(model.isSyncing || model.isBootstrapping)
+                .disabled(!model.canStartManualSync)
 
                 Button {
                     selectedTab = .settings

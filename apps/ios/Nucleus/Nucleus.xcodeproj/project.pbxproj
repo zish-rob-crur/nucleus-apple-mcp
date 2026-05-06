@@ -24,6 +24,7 @@
 		80A1B2C3D4E5F60718293A4B /* PrivacyPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80A1B2C3D4E5F60718293A4A /* PrivacyPolicyView.swift */; };
 		80A1B2C3D4E5F60718293A4D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 80A1B2C3D4E5F60718293A4C /* PrivacyInfo.xcprivacy */; };
 		88AA88AA88AA88AA88AA88AA /* NucleusLiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11FF11FF11FF11FF11FF11 /* NucleusLiveActivityController.swift */; };
+		8AB7D2E44A8D4CB68C9F5A12 /* NetworkStatusMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1E3B7CA2F64D2CA1F8E904 /* NetworkStatusMonitor.swift */; };
 		996B8B3EC040CBFBE7ACAA79 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFDA905BB0E99126049DAA9F /* SettingsView.swift */; };
 		99BB99BB99BB99BB99BB99BB /* NucleusSyncLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB12AB12AB12AB12AB12AB12 /* NucleusSyncLiveActivityWidget.swift */; };
 		9C29AD7172ABD2300ECF5088 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DBC88197ADE90043D894FC5 /* OverviewView.swift */; };
@@ -71,6 +72,7 @@
 		42712A422FD44961BD6C5C16 /* NucleusDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NucleusDesign.swift; sourceTree = "<group>"; };
 		4BDB7BF220214A429FF31264 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4E891A8BFE5C4703B9F06166 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		6D1E3B7CA2F64D2CA1F8E904 /* NetworkStatusMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkStatusMonitor.swift; sourceTree = "<group>"; };
 		7B3A6C2E91D54FE1A82C0B47 /* SyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncSettingsView.swift; sourceTree = "<group>"; };
 		7E4F1F391B704BE99525C057 /* NucleusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NucleusApp.swift; sourceTree = "<group>"; };
 		80A1B2C3D4E5F60718293A4A /* PrivacyPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyPolicyView.swift; sourceTree = "<group>"; };
@@ -117,6 +119,7 @@
 			isa = PBXGroup;
 			children = (
 				4E891A8BFE5C4703B9F06166 /* AppModel.swift */,
+				6D1E3B7CA2F64D2CA1F8E904 /* NetworkStatusMonitor.swift */,
 				FF11FF11FF11FF11FF11FF11 /* NucleusLiveActivityController.swift */,
 				7E4F1F391B704BE99525C057 /* NucleusApp.swift */,
 				2C549216CC464C59ADEDEB9A /* ContentView.swift */,
@@ -298,6 +301,7 @@
 				11AA11AA11AA11AA11AA11AA /* NucleusActivitySnapshot.swift in Sources */,
 				66AA66AA66AA66AA66AA66AA /* NucleusSyncLiveActivity.swift in Sources */,
 				A755553F30B8455FAE77E4EA /* AppModel.swift in Sources */,
+				8AB7D2E44A8D4CB68C9F5A12 /* NetworkStatusMonitor.swift in Sources */,
 				88AA88AA88AA88AA88AA88AA /* NucleusLiveActivityController.swift in Sources */,
 				FFE955B0CD0A4BE18BD87D53 /* NucleusApp.swift in Sources */,
 				B2E8A5D0C2C741CBA2032ECC /* ContentView.swift in Sources */,

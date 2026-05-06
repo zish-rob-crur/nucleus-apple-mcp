@@ -250,15 +250,33 @@ enum S3UploadError: Error, LocalizedError {
 }
 
 final class S3ObjectStoreUploader: @unchecked Sendable {
-    struct PutResult: Equatable {
+    struct PutResult: Equatable, Sendable {
         let key: String
         let etag: String?
     }
 
-    private let session: URLSession
+    private static let wifiOnlySession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.allowsExpensiveNetworkAccess = false
+        configuration.allowsConstrainedNetworkAccess = false
+        configuration.timeoutIntervalForRequest = 60
+        configuration.timeoutIntervalForResource = 300
+        return URLSession(configuration: configuration)
+    }()
 
-    init(session: URLSession = .shared) {
-        self.session = session
+    private static let cellularAllowedSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.allowsExpensiveNetworkAccess = true
+        configuration.allowsConstrainedNetworkAccess = false
+        configuration.timeoutIntervalForRequest = 60
+        configuration.timeoutIntervalForResource = 300
+        return URLSession(configuration: configuration)
+    }()
+
+    private let sessionOverride: URLSession?
+
+    init(session: URLSession? = nil) {
+        self.sessionOverride = session
     }
 
     func putFile(
@@ -349,6 +367,7 @@ final class S3ObjectStoreUploader: @unchecked Sendable {
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         }
 
+        let session = sessionOverride ?? (config.allowCellularSync ? Self.cellularAllowedSession : Self.wifiOnlySession)
         let (_, response) = try await session.upload(for: request, fromFile: localURL)
         guard let http = response as? HTTPURLResponse else {
             throw S3UploadError.requestFailed(-1, "Invalid response.")

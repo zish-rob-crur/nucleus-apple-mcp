@@ -28,12 +28,14 @@ final class AppModel: ObservableObject {
     @Published var lastRawWritten: WrittenRawSamples?
     @Published var preferICloud: Bool
     @Published var catchUpDays: Int
+    @Published var allowCellularSync: Bool
     @Published var objectStoreSettings: ObjectStoreSettings
     @Published var objectStoreHasCredentials: Bool
     @Published var lastObjectStoreTest: ObjectStoreTestResult?
     @Published var storageStatus: StorageStatus?
     @Published var anchorDiagnostics: HealthAnchorDiagnostics = .empty
     @Published var backgroundDeliveryStatus: BackgroundDeliveryStatus = .idle
+    @Published var networkSyncStatus: NetworkSyncStatus = .unknown
     @Published var syncProgress: SyncProgress?
     @Published var lastError: String?
     @Published var logs: [LogLine] = []
@@ -43,6 +45,7 @@ final class AppModel: ObservableObject {
     private let storage = RevisionStorage()
     private let anchorStore = HealthAnchorStore()
     private let objectStoreUploader = S3ObjectStoreUploader()
+    private let networkMonitor = NetworkStatusMonitor()
     private lazy var identity = Self.loadOrCreateIdentity()
     private var objectStoreCredentials: ObjectStoreCredentials?
     private var healthObserverToken: NSObjectProtocol?
@@ -62,11 +65,16 @@ final class AppModel: ObservableObject {
         defaults.set(false, forKey: Self.preferICloudKey)
         let savedCatchUp = defaults.integer(forKey: Self.catchUpDaysKey)
         self.catchUpDays = (1...14).contains(savedCatchUp) ? savedCatchUp : 7
+        self.allowCellularSync = defaults.bool(forKey: Self.allowCellularSyncKey)
         self.hasCompletedInitialSync = defaults.bool(forKey: Self.initialSyncCompletedKey)
         self.objectStoreSettings = ObjectStoreSettingsStore.loadSettings()
         self.objectStoreHasCredentials = false
         self.objectStoreCredentials = nil
         self.activitySnapshot = NucleusActivityStore.load()
+        networkMonitor.onStatusChange = { [weak self] status in
+            self?.handleNetworkStatusChange(status)
+        }
+        networkMonitor.start()
         registerHealthObserverNotifications()
         bootstrapIfNeeded()
     }
@@ -74,9 +82,15 @@ final class AppModel: ObservableObject {
     var collectorId: String { identity.collectorId }
     var deviceId: String { identity.deviceId }
     var needsInitialSyncRangeSelection: Bool { !hasCompletedInitialSync }
+    var canSyncOnCurrentNetwork: Bool { networkSyncStatus.allowsSync(allowCellular: allowCellularSync) }
+    var isSyncPausedForNetwork: Bool { !canSyncOnCurrentNetwork }
+    var canStartManualSync: Bool { !isSyncing && !isBootstrapping && canSyncOnCurrentNetwork }
+    var networkSyncPolicyLabel: String { allowCellularSync ? "Wi-Fi + Mobile Data" : "Wi-Fi Only" }
+    var networkSyncDetail: String { networkSyncStatus.detail(allowCellular: allowCellularSync) }
     var manualSyncButtonTitle: String {
         if isBootstrapping { return "Loading…" }
         if isSyncing { return "Syncing…" }
+        if isSyncPausedForNetwork { return allowCellularSync ? "Waiting for Network" : "Waiting for Wi-Fi" }
         return needsInitialSyncRangeSelection ? "Start First Sync" : "Sync Now"
     }
 
@@ -205,10 +219,14 @@ final class AppModel: ObservableObject {
     private func startSync(catchUpDays: Int, source: SyncSource) -> Bool {
         if isSyncing {
             if case .observer(let typeKeys) = source {
-                pendingObserverTypeKeys.formUnion(typeKeys)
-                PendingBackgroundSyncStore.save(typeKeys: pendingObserverTypeKeys.sorted())
+                queuePendingObserverSync(typeKeys)
                 log(.info, "Queued observer sync while another sync is running.")
             }
+            return false
+        }
+
+        guard canSyncOnCurrentNetwork else {
+            pauseSyncForNetwork(source: source)
             return false
         }
 
@@ -216,6 +234,9 @@ final class AppModel: ObservableObject {
             lastError = "Storage is not configured."
             publishActivitySnapshot()
             if case .observer = source {
+                if case .observer(let typeKeys) = source {
+                    queuePendingObserverSync(typeKeys)
+                }
                 completePendingObserverEvents()
             }
             return false
@@ -282,6 +303,7 @@ final class AppModel: ObservableObject {
                 let totalDates = syncPlan.affectedDates.count
 
                 for (index, ymd) in syncPlan.affectedDates.enumerated() {
+                    try ensureSyncNetworkAvailable()
                     setSyncProgress(SyncProgress(
                         phase: .collecting,
                         mode: progressMode,
@@ -343,20 +365,17 @@ final class AppModel: ObservableObject {
                             totalUploadFiles: uploadTargets.count
                         ))
 
-                        for (uploadIndex, target) in uploadTargets.enumerated() {
-                            let result = try await objectStoreUploader.putFile(target, relativeTo: storageStatus.rootURL, config: objectStoreConfig)
-                            log(.success, "Uploaded \(ymd) → s3://\(objectStoreConfig.bucket)/\(result.key)")
-                            setSyncProgress(SyncProgress(
-                                phase: .uploading,
-                                mode: progressMode,
-                                completedDates: index,
-                                totalDates: totalDates,
-                                currentDateIndex: index + 1,
-                                currentDate: ymd,
-                                uploadedFiles: uploadIndex + 1,
-                                totalUploadFiles: uploadTargets.count
-                            ))
-                        }
+                        try ensureSyncNetworkAvailable()
+                        try await uploadFiles(
+                            uploadTargets,
+                            ymd: ymd,
+                            storageRoot: storageStatus.rootURL,
+                            config: objectStoreConfig,
+                            progressMode: progressMode,
+                            completedDates: index,
+                            totalDates: totalDates,
+                            currentDateIndex: index + 1
+                        )
                     }
 
                     setSyncProgress(SyncProgress(
@@ -387,6 +406,7 @@ final class AppModel: ObservableObject {
                 log(.success, "Wrote commit → \(commitURL.lastPathComponent)")
 
                 if let objectStoreConfig {
+                    try ensureSyncNetworkAvailable()
                     let result = try await objectStoreUploader.putFile(commitURL, relativeTo: storageStatus.rootURL, config: objectStoreConfig)
                     log(.success, "Uploaded commit → s3://\(objectStoreConfig.bucket)/\(result.key)")
                 }
@@ -398,9 +418,18 @@ final class AppModel: ObservableObject {
                 markInitialSyncCompleted()
                 log(.success, "Anchor state updated (\(primedCount) primed types).")
             } catch {
-                lastError = error.localizedDescription
+                if error is SyncPauseError {
+                    if case .observer(let typeKeys) = source {
+                        queuePendingObserverSync(typeKeys)
+                    }
+                    log(.info, "Sync paused until Wi-Fi is available.")
+                } else {
+                    lastError = error.localizedDescription
+                }
                 publishActivitySnapshot()
-                log(.error, "Sync failed: \(error.localizedDescription)")
+                if !(error is SyncPauseError) {
+                    log(.error, "Sync failed: \(error.localizedDescription)")
+                }
             }
 
             log(.info, "Sync finished.")
@@ -411,6 +440,19 @@ final class AppModel: ObservableObject {
 
     func clearLogs() {
         logs.removeAll()
+    }
+
+    private func handleNetworkStatusChange(_ status: NetworkSyncStatus) {
+        guard networkSyncStatus != status else { return }
+        networkSyncStatus = status
+        publishActivitySnapshot()
+
+        if canSyncOnCurrentNetwork, hasCompletedBootstrap {
+            Task { [weak self] in
+                guard let self else { return }
+                _ = await self.processPendingBackgroundSyncIfPossible()
+            }
+        }
     }
 
     func handleScenePhase(_ phase: ScenePhase) {
@@ -424,7 +466,7 @@ final class AppModel: ObservableObject {
                 _ = await self.processPendingBackgroundSyncIfPossible()
             }
         case .background:
-            scheduleBackgroundRefresh()
+            scheduleBackgroundRefresh(after: nextBackgroundRefreshDelay)
         default:
             break
         }
@@ -457,8 +499,7 @@ final class AppModel: ObservableObject {
         }
 
         pendingObserverEvents.append(event)
-        pendingObserverTypeKeys.insert(event.typeKey)
-        PendingBackgroundSyncStore.save(typeKeys: pendingObserverTypeKeys.sorted())
+        queuePendingObserverSync([event.typeKey])
         beginObserverBackgroundTaskIfNeeded()
         log(.info, "Health observer fired for \(event.typeKey).")
 
@@ -489,6 +530,26 @@ final class AppModel: ObservableObject {
         if !startSync(catchUpDays: catchUpDays, source: .observer(followUpTypeKeys)) {
             completePendingObserverEvents()
         }
+    }
+
+    private func queuePendingObserverSync(_ typeKeys: [String]) {
+        pendingObserverTypeKeys.formUnion(typeKeys)
+        PendingBackgroundSyncStore.merge(typeKeys: pendingObserverTypeKeys.sorted())
+    }
+
+    private func pauseSyncForNetwork(source: SyncSource) {
+        switch source {
+        case .observer(let typeKeys):
+            queuePendingObserverSync(typeKeys)
+            completePendingObserverEvents()
+        case .scheduledRefresh:
+            break
+        case .manual, .backfill:
+            lastError = nil
+            publishActivitySnapshot()
+        }
+
+        log(.info, "Sync paused until Wi-Fi is available.")
     }
 
     private func consumePendingObserverTypeKeys() -> [String] {
@@ -535,6 +596,19 @@ final class AppModel: ObservableObject {
         UserDefaults.standard.set(clamped, forKey: Self.catchUpDaysKey)
     }
 
+    func setAllowCellularSync(_ value: Bool) {
+        allowCellularSync = value
+        UserDefaults.standard.set(value, forKey: Self.allowCellularSyncKey)
+        publishActivitySnapshot()
+
+        if canSyncOnCurrentNetwork, hasCompletedBootstrap {
+            Task { [weak self] in
+                guard let self else { return }
+                _ = await self.processPendingBackgroundSyncIfPossible()
+            }
+        }
+    }
+
     func saveObjectStoreSettings(_ settings: ObjectStoreSettings) {
         objectStoreSettings = settings
         ObjectStoreSettingsStore.saveSettings(settings)
@@ -574,7 +648,8 @@ final class AppModel: ObservableObject {
             bucket: objectStoreSettings.bucket,
             prefix: objectStoreSettings.prefix,
             usePathStyle: objectStoreSettings.usePathStyle,
-            credentials: credentials
+            credentials: credentials,
+            allowCellularSync: allowCellularSync
         )
     }
 
@@ -679,7 +754,7 @@ final class AppModel: ObservableObject {
     }
 
     func handleBackgroundRefreshTask() async {
-        defer { scheduleBackgroundRefresh() }
+        defer { scheduleBackgroundRefresh(after: nextBackgroundRefreshDelay) }
 
         await waitForBootstrapIfNeeded()
         guard !Task.isCancelled else { return }
@@ -693,7 +768,12 @@ final class AppModel: ObservableObject {
             return
         }
 
-        guard canRunBackgroundSync else { return }
+        guard canRunBackgroundSync else {
+            if PendingBackgroundSyncStore.hasPendingRequest(), !canSyncOnCurrentNetwork {
+                log(.info, "Background sync is waiting for an allowed network.")
+            }
+            return
+        }
 
         log(.info, "Running scheduled background refresh.")
         if startSync(catchUpDays: catchUpDays, source: .scheduledRefresh) {
@@ -701,9 +781,13 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func scheduleBackgroundRefresh() {
+    private func scheduleBackgroundRefresh(after delay: TimeInterval? = nil) {
         do {
-            try NucleusBackgroundRefresh.schedule()
+            if let delay {
+                try NucleusBackgroundRefresh.schedule(after: delay)
+            } else {
+                try NucleusBackgroundRefresh.schedule()
+            }
         } catch {
             log(.error, "Unable to schedule background refresh: \(error.localizedDescription)")
         }
@@ -737,6 +821,12 @@ final class AppModel: ObservableObject {
 
         let summary = request.typeKeys.isEmpty ? "queued changes" : request.typeKeys.joined(separator: ", ")
         log(.info, "Resuming queued background sync (\(summary)).")
+
+        if request.typeKeys.isEmpty {
+            pendingObserverTypeKeys.removeAll()
+        } else {
+            pendingObserverTypeKeys.subtract(request.typeKeys)
+        }
 
         guard startSync(catchUpDays: catchUpDays, source: .observer(request.typeKeys)) else {
             return false
@@ -850,6 +940,67 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func ensureSyncNetworkAvailable() throws {
+        guard canSyncOnCurrentNetwork else {
+            throw SyncPauseError.requiresWiFi
+        }
+    }
+
+    private func uploadFiles(
+        _ targets: [URL],
+        ymd: String,
+        storageRoot: URL,
+        config: S3ObjectStoreConfig,
+        progressMode: SyncProgress.Mode,
+        completedDates: Int,
+        totalDates: Int,
+        currentDateIndex: Int
+    ) async throws {
+        guard !targets.isEmpty else { return }
+
+        let uploader = objectStoreUploader
+        let maxConcurrentUploads = min(Self.maxConcurrentUploads, targets.count)
+        var iterator = targets.enumerated().makeIterator()
+        var activeUploads = 0
+        var uploadedFiles = 0
+
+        try await withThrowingTaskGroup(of: UploadResult.self) { group in
+            func scheduleNextUpload() {
+                guard let next = iterator.next() else { return }
+                activeUploads += 1
+                group.addTask {
+                    let result = try await uploader.putFile(next.element, relativeTo: storageRoot, config: config)
+                    return UploadResult(index: next.offset, localURL: next.element, result: result)
+                }
+            }
+
+            for _ in 0..<maxConcurrentUploads {
+                scheduleNextUpload()
+            }
+
+            while let upload = try await group.next() {
+                activeUploads -= 1
+                uploadedFiles += 1
+                log(.success, "Uploaded \(ymd) → s3://\(config.bucket)/\(upload.result.key)")
+                setSyncProgress(SyncProgress(
+                    phase: .uploading,
+                    mode: progressMode,
+                    completedDates: completedDates,
+                    totalDates: totalDates,
+                    currentDateIndex: currentDateIndex,
+                    currentDate: ymd,
+                    uploadedFiles: uploadedFiles,
+                    totalUploadFiles: targets.count
+                ))
+
+                try ensureSyncNetworkAvailable()
+                if activeUploads < maxConcurrentUploads {
+                    scheduleNextUpload()
+                }
+            }
+        }
+    }
+
     private func effectiveCatchUpDays(for requestedDays: Int, source: SyncSource) -> Int {
         switch source {
         case .manual, .backfill:
@@ -921,20 +1072,43 @@ final class AppModel: ObservableObject {
         hasCompletedBootstrap &&
         hasCompletedInitialSync &&
         !isSyncing &&
+        canSyncOnCurrentNetwork &&
         authRequestStatus == .unnecessary &&
         storageStatus != nil
     }
 
+    private var nextBackgroundRefreshDelay: TimeInterval {
+        canSyncOnCurrentNetwork ? Self.backgroundRefreshInterval : Self.backgroundRetryInterval
+    }
+
     private static let preferICloudKey = "nucleus.prefer_icloud_drive"
     private static let catchUpDaysKey = "nucleus.catch_up_days"
+    private static let allowCellularSyncKey = "nucleus.allow_cellular_sync"
     private static let initialSyncCompletedKey = "nucleus.initial_sync_completed"
     private static let foregroundRefreshInterval: TimeInterval = 3
     private static let maxBackgroundCatchUpDays = 3
+    private static let maxConcurrentUploads = 4
+    private static let backgroundRefreshInterval: TimeInterval = 15 * 60
+    private static let backgroundRetryInterval: TimeInterval = 30 * 60
 }
 
 private enum StorageResolution: Sendable {
     case success(StorageStatus)
     case failure(String)
+}
+
+private enum SyncPauseError: Error, LocalizedError {
+    case requiresWiFi
+
+    var errorDescription: String? {
+        "Sync paused until Wi-Fi is available."
+    }
+}
+
+private struct UploadResult: Sendable {
+    let index: Int
+    let localURL: URL
+    let result: S3ObjectStoreUploader.PutResult
 }
 
 struct LogLine: Identifiable, Equatable {
@@ -1336,11 +1510,12 @@ enum ObjectStoreSettingsStore {
     }
 }
 
-struct S3ObjectStoreConfig: Equatable {
+struct S3ObjectStoreConfig: Equatable, Sendable {
     let endpoint: URL
     let region: String
     let bucket: String
     let prefix: String
     let usePathStyle: Bool
     let credentials: ObjectStoreCredentials
+    let allowCellularSync: Bool
 }

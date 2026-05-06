@@ -59,6 +59,55 @@ final class HealthCollector: @unchecked Sendable {
         raw * 100.0
     }
 
+    private func dailyStepCount(day: DayWindow) async -> MetricResult {
+        guard let type = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            return MetricResult(value: nil, status: .unsupported, unit: MetricKey.steps.unitString)
+        }
+
+        return await queryCumulativeSum(
+            type: type,
+            unit: .count(),
+            day: day
+        )
+    }
+
+    private func dailyRestingHeartRate(day: DayWindow) async -> MetricResult {
+        guard let type = HKQuantityType.quantityType(forIdentifier: .restingHeartRate) else {
+            return MetricResult(value: nil, status: .unsupported, unit: MetricKey.restingHrAvg.unitString)
+        }
+
+        return await queryDiscreteAverage(
+            type: type,
+            unit: HKUnit.count().unitDivided(by: .minute()),
+            unitString: MetricKey.restingHrAvg.unitString,
+            day: day
+        )
+    }
+
+    private func dailyHRV(day: DayWindow) async -> MetricResult {
+        guard let type = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else {
+            return MetricResult(value: nil, status: .unsupported, unit: MetricKey.hrvSdnnAvg.unitString)
+        }
+
+        return await queryDiscreteAverage(
+            type: type,
+            unit: HKUnit.secondUnit(with: .milli),
+            unitString: MetricKey.hrvSdnnAvg.unitString,
+            day: day
+        )
+    }
+
+    private func dailySleep(day: DayWindow) async -> SleepResults {
+        guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            return SleepResults(
+                asleep: MetricResult(value: nil, status: .unsupported, unit: MetricKey.sleepAsleepMinutes.unitString),
+                inBed: MetricResult(value: nil, status: .unsupported, unit: MetricKey.sleepInBedMinutes.unitString)
+            )
+        }
+
+        return await querySleepMinutes(type: type, day: day)
+    }
+
     func authorizationRequestStatus() async -> HKAuthorizationRequestStatus {
         guard HKHealthStore.isHealthDataAvailable() else { return .unknown }
 
@@ -144,136 +193,93 @@ final class HealthCollector: @unchecked Sendable {
         let generatedAt = Date()
         let dayWindow = Self.dayWindow(for: date, timeZone: timeZone)
 
-        let steps: MetricResult = if let type = HKQuantityType.quantityType(forIdentifier: .stepCount) {
-            await queryCumulativeSum(
-                type: type,
-                unit: .count(),
-                day: dayWindow
-            )
-        } else {
-            MetricResult(value: nil, status: .unsupported, unit: MetricKey.steps.unitString)
-        }
-
-        let resting: MetricResult = if let type = HKQuantityType.quantityType(forIdentifier: .restingHeartRate) {
-            await queryDiscreteAverage(
-                type: type,
-                unit: HKUnit.count().unitDivided(by: .minute()),
-                unitString: MetricKey.restingHrAvg.unitString,
-                day: dayWindow
-            )
-        } else {
-            MetricResult(value: nil, status: .unsupported, unit: MetricKey.restingHrAvg.unitString)
-        }
-
-        let hrv: MetricResult = if let type = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN) {
-            await queryDiscreteAverage(
-                type: type,
-                unit: HKUnit.secondUnit(with: .milli),
-                unitString: MetricKey.hrvSdnnAvg.unitString,
-                day: dayWindow
-            )
-        } else {
-            MetricResult(value: nil, status: .unsupported, unit: MetricKey.hrvSdnnAvg.unitString)
-        }
-
-        let vo2Max = await metricForLatest(
+        async let steps = dailyStepCount(day: dayWindow)
+        async let resting = dailyRestingHeartRate(day: dayWindow)
+        async let hrv = dailyHRV(day: dayWindow)
+        async let vo2Max = metricForLatest(
             typeIdentifier: .vo2Max,
             unit: Self.vo2MaxUnit,
             key: .vo2Max,
             day: dayWindow
         )
-
-        let oxygenSaturation = await metricForAverage(
+        async let oxygenSaturation = metricForAverage(
             typeIdentifier: .oxygenSaturation,
             unit: Self.percentUnit,
             key: .oxygenSaturationPct,
             day: dayWindow,
             transform: Self.percentValue
         )
-
-        let respiratoryRate = await metricForAverage(
+        async let respiratoryRate = metricForAverage(
             typeIdentifier: .respiratoryRate,
             unit: Self.respiratoryRateUnit,
             key: .respiratoryRateAvg,
             day: dayWindow
         )
-
-        let wristTemperature = await metricForAverage(
+        async let wristTemperature = metricForAverage(
             typeIdentifier: .appleSleepingWristTemperature,
             unit: Self.temperatureUnit,
             key: .wristTemperatureCelsius,
             day: dayWindow
         )
-
-        let bodyMass = await metricForLatest(
+        async let bodyMass = metricForLatest(
             typeIdentifier: .bodyMass,
             unit: HKUnit.gramUnit(with: .kilo),
             key: .bodyMassKg,
             day: dayWindow
         )
-
-        let bodyFat = await metricForLatest(
+        async let bodyFat = metricForLatest(
             typeIdentifier: .bodyFatPercentage,
             unit: Self.percentUnit,
             key: .bodyFatPercentage,
             day: dayWindow,
             transform: Self.percentValue
         )
-
-        let bloodGlucose = await metricForLatest(
+        async let bloodGlucose = metricForLatest(
             typeIdentifier: .bloodGlucose,
             unit: Self.bloodGlucoseUnit,
             key: .bloodGlucoseMgDl,
             day: dayWindow
         )
-
-        let bodyTemperature = await metricForLatest(
+        async let bodyTemperature = metricForLatest(
             typeIdentifier: .bodyTemperature,
             unit: Self.temperatureUnit,
             key: .bodyTemperatureCelsius,
             day: dayWindow
         )
-
-        let basalBodyTemperature = await metricForLatest(
+        async let basalBodyTemperature = metricForLatest(
             typeIdentifier: .basalBodyTemperature,
             unit: Self.temperatureUnit,
             key: .basalBodyTemperatureCelsius,
             day: dayWindow
         )
+        async let bloodPressure = queryLatestBloodPressure(day: dayWindow)
+        async let sleep = dailySleep(day: dayWindow)
+        async let activity = queryActivitySummary(day: dayWindow)
 
-        let bloodPressure = await queryLatestBloodPressure(day: dayWindow)
-
-        let sleep: SleepResults = if let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
-            await querySleepMinutes(type: type, day: dayWindow)
-        } else {
-            SleepResults(
-                asleep: MetricResult(value: nil, status: .unsupported, unit: MetricKey.sleepAsleepMinutes.unitString),
-                inBed: MetricResult(value: nil, status: .unsupported, unit: MetricKey.sleepInBedMinutes.unitString)
-            )
-        }
-
-        let activity = await queryActivitySummary(day: dayWindow)
+        let activityResults = await activity
+        let sleepResults = await sleep
+        let bloodPressureResults = await bloodPressure
 
         let metricResults: [MetricKey: MetricResult] = [
-            .steps: steps,
-            .activeEnergyKcal: activity.activeEnergy,
-            .exerciseMinutes: activity.exerciseMinutes,
-            .standHours: activity.standHours,
-            .restingHrAvg: resting,
-            .hrvSdnnAvg: hrv,
-            .vo2Max: vo2Max,
-            .oxygenSaturationPct: oxygenSaturation,
-            .respiratoryRateAvg: respiratoryRate,
-            .wristTemperatureCelsius: wristTemperature,
-            .bodyMassKg: bodyMass,
-            .bodyFatPercentage: bodyFat,
-            .bloodPressureSystolicMmhg: bloodPressure.systolic,
-            .bloodPressureDiastolicMmhg: bloodPressure.diastolic,
-            .bloodGlucoseMgDl: bloodGlucose,
-            .bodyTemperatureCelsius: bodyTemperature,
-            .basalBodyTemperatureCelsius: basalBodyTemperature,
-            .sleepAsleepMinutes: sleep.asleep,
-            .sleepInBedMinutes: sleep.inBed,
+            .steps: await steps,
+            .activeEnergyKcal: activityResults.activeEnergy,
+            .exerciseMinutes: activityResults.exerciseMinutes,
+            .standHours: activityResults.standHours,
+            .restingHrAvg: await resting,
+            .hrvSdnnAvg: await hrv,
+            .vo2Max: await vo2Max,
+            .oxygenSaturationPct: await oxygenSaturation,
+            .respiratoryRateAvg: await respiratoryRate,
+            .wristTemperatureCelsius: await wristTemperature,
+            .bodyMassKg: await bodyMass,
+            .bodyFatPercentage: await bodyFat,
+            .bloodPressureSystolicMmhg: bloodPressureResults.systolic,
+            .bloodPressureDiastolicMmhg: bloodPressureResults.diastolic,
+            .bloodGlucoseMgDl: await bloodGlucose,
+            .bodyTemperatureCelsius: await bodyTemperature,
+            .basalBodyTemperatureCelsius: await basalBodyTemperature,
+            .sleepAsleepMinutes: sleepResults.asleep,
+            .sleepInBedMinutes: sleepResults.inBed,
         ]
 
         let ymd = DateFormatting.ymdString(from: date, in: timeZone)
@@ -360,7 +366,7 @@ final class HealthCollector: @unchecked Sendable {
             sampleEntries.append(contentsOf: entries)
         }
 
-        let stepCount = await exportQuantitySamples(
+        async let stepCountExport = exportQuantitySamples(
             key: .stepCount,
             typeIdentifier: .stepCount,
             unit: .count(),
@@ -368,9 +374,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .stepCount, status: stepCount.status, entries: stepCount.entries)
-
-        let activeEnergyBurned = await exportQuantitySamples(
+        async let activeEnergyBurnedExport = exportQuantitySamples(
             key: .activeEnergyBurned,
             typeIdentifier: .activeEnergyBurned,
             unit: .kilocalorie(),
@@ -378,9 +382,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .activeEnergyBurned, status: activeEnergyBurned.status, entries: activeEnergyBurned.entries)
-
-        let heartRate = await exportQuantitySamples(
+        async let heartRateExport = exportQuantitySamples(
             key: .heartRate,
             typeIdentifier: .heartRate,
             unit: HKUnit.count().unitDivided(by: .minute()),
@@ -388,9 +390,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .heartRate, status: heartRate.status, entries: heartRate.entries)
-
-        let restingHeartRate = await exportQuantitySamples(
+        async let restingHeartRateExport = exportQuantitySamples(
             key: .restingHeartRate,
             typeIdentifier: .restingHeartRate,
             unit: HKUnit.count().unitDivided(by: .minute()),
@@ -398,9 +398,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .restingHeartRate, status: restingHeartRate.status, entries: restingHeartRate.entries)
-
-        let hrvSDNN = await exportQuantitySamples(
+        async let hrvSDNNExport = exportQuantitySamples(
             key: .hrvSDNN,
             typeIdentifier: .heartRateVariabilitySDNN,
             unit: HKUnit.secondUnit(with: .milli),
@@ -408,9 +406,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .hrvSDNN, status: hrvSDNN.status, entries: hrvSDNN.entries)
-
-        let vo2Max = await exportQuantitySamples(
+        async let vo2MaxExport = exportQuantitySamples(
             key: .vo2Max,
             typeIdentifier: .vo2Max,
             unit: Self.vo2MaxUnit,
@@ -418,9 +414,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .vo2Max, status: vo2Max.status, entries: vo2Max.entries)
-
-        let oxygenSaturation = await exportQuantitySamples(
+        async let oxygenSaturationExport = exportQuantitySamples(
             key: .oxygenSaturation,
             typeIdentifier: .oxygenSaturation,
             unit: Self.percentUnit,
@@ -429,9 +423,7 @@ final class HealthCollector: @unchecked Sendable {
             timeZone: timeZone,
             transform: Self.percentValue
         )
-        capture(key: .oxygenSaturation, status: oxygenSaturation.status, entries: oxygenSaturation.entries)
-
-        let respiratoryRate = await exportQuantitySamples(
+        async let respiratoryRateExport = exportQuantitySamples(
             key: .respiratoryRate,
             typeIdentifier: .respiratoryRate,
             unit: Self.respiratoryRateUnit,
@@ -439,9 +431,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .respiratoryRate, status: respiratoryRate.status, entries: respiratoryRate.entries)
-
-        let wristTemperature = await exportQuantitySamples(
+        async let wristTemperatureExport = exportQuantitySamples(
             key: .wristTemperature,
             typeIdentifier: .appleSleepingWristTemperature,
             unit: Self.temperatureUnit,
@@ -449,9 +439,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .wristTemperature, status: wristTemperature.status, entries: wristTemperature.entries)
-
-        let bodyMass = await exportQuantitySamples(
+        async let bodyMassExport = exportQuantitySamples(
             key: .bodyMass,
             typeIdentifier: .bodyMass,
             unit: HKUnit.gramUnit(with: .kilo),
@@ -459,9 +447,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .bodyMass, status: bodyMass.status, entries: bodyMass.entries)
-
-        let bodyFat = await exportQuantitySamples(
+        async let bodyFatExport = exportQuantitySamples(
             key: .bodyFatPercentage,
             typeIdentifier: .bodyFatPercentage,
             unit: Self.percentUnit,
@@ -470,12 +456,8 @@ final class HealthCollector: @unchecked Sendable {
             timeZone: timeZone,
             transform: Self.percentValue
         )
-        capture(key: .bodyFatPercentage, status: bodyFat.status, entries: bodyFat.entries)
-
-        let bloodPressure = await exportBloodPressureSamples(day: dayWindow, timeZone: timeZone)
-        capture(key: .bloodPressure, status: bloodPressure.status, entries: bloodPressure.entries)
-
-        let bloodGlucose = await exportQuantitySamples(
+        async let bloodPressureExport = exportBloodPressureSamples(day: dayWindow, timeZone: timeZone)
+        async let bloodGlucoseExport = exportQuantitySamples(
             key: .bloodGlucose,
             typeIdentifier: .bloodGlucose,
             unit: Self.bloodGlucoseUnit,
@@ -483,9 +465,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .bloodGlucose, status: bloodGlucose.status, entries: bloodGlucose.entries)
-
-        let bodyTemperature = await exportQuantitySamples(
+        async let bodyTemperatureExport = exportQuantitySamples(
             key: .bodyTemperature,
             typeIdentifier: .bodyTemperature,
             unit: Self.temperatureUnit,
@@ -493,9 +473,7 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
-        capture(key: .bodyTemperature, status: bodyTemperature.status, entries: bodyTemperature.entries)
-
-        let basalBodyTemperature = await exportQuantitySamples(
+        async let basalBodyTemperatureExport = exportQuantitySamples(
             key: .basalBodyTemperature,
             typeIdentifier: .basalBodyTemperature,
             unit: Self.temperatureUnit,
@@ -503,12 +481,58 @@ final class HealthCollector: @unchecked Sendable {
             day: dayWindow,
             timeZone: timeZone
         )
+        async let sleepExport = exportSleepSamples(day: dayWindow, timeZone: timeZone)
+        async let workoutsExport = exportWorkoutSamples(day: dayWindow, timeZone: timeZone)
+
+        let stepCount = await stepCountExport
+        capture(key: .stepCount, status: stepCount.status, entries: stepCount.entries)
+
+        let activeEnergyBurned = await activeEnergyBurnedExport
+        capture(key: .activeEnergyBurned, status: activeEnergyBurned.status, entries: activeEnergyBurned.entries)
+
+        let heartRate = await heartRateExport
+        capture(key: .heartRate, status: heartRate.status, entries: heartRate.entries)
+
+        let restingHeartRate = await restingHeartRateExport
+        capture(key: .restingHeartRate, status: restingHeartRate.status, entries: restingHeartRate.entries)
+
+        let hrvSDNN = await hrvSDNNExport
+        capture(key: .hrvSDNN, status: hrvSDNN.status, entries: hrvSDNN.entries)
+
+        let vo2Max = await vo2MaxExport
+        capture(key: .vo2Max, status: vo2Max.status, entries: vo2Max.entries)
+
+        let oxygenSaturation = await oxygenSaturationExport
+        capture(key: .oxygenSaturation, status: oxygenSaturation.status, entries: oxygenSaturation.entries)
+
+        let respiratoryRate = await respiratoryRateExport
+        capture(key: .respiratoryRate, status: respiratoryRate.status, entries: respiratoryRate.entries)
+
+        let wristTemperature = await wristTemperatureExport
+        capture(key: .wristTemperature, status: wristTemperature.status, entries: wristTemperature.entries)
+
+        let bodyMass = await bodyMassExport
+        capture(key: .bodyMass, status: bodyMass.status, entries: bodyMass.entries)
+
+        let bodyFat = await bodyFatExport
+        capture(key: .bodyFatPercentage, status: bodyFat.status, entries: bodyFat.entries)
+
+        let bloodPressure = await bloodPressureExport
+        capture(key: .bloodPressure, status: bloodPressure.status, entries: bloodPressure.entries)
+
+        let bloodGlucose = await bloodGlucoseExport
+        capture(key: .bloodGlucose, status: bloodGlucose.status, entries: bloodGlucose.entries)
+
+        let bodyTemperature = await bodyTemperatureExport
+        capture(key: .bodyTemperature, status: bodyTemperature.status, entries: bodyTemperature.entries)
+
+        let basalBodyTemperature = await basalBodyTemperatureExport
         capture(key: .basalBodyTemperature, status: basalBodyTemperature.status, entries: basalBodyTemperature.entries)
 
-        let sleep = await exportSleepSamples(day: dayWindow, timeZone: timeZone)
+        let sleep = await sleepExport
         capture(key: .sleepAnalysis, status: sleep.status, entries: sleep.entries)
 
-        let workouts = await exportWorkoutSamples(day: dayWindow, timeZone: timeZone)
+        let workouts = await workoutsExport
         capture(key: .workout, status: workouts.status, entries: workouts.entries)
 
         for key in RawKey.allCases {

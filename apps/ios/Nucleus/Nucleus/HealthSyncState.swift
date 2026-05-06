@@ -134,6 +134,24 @@ enum PendingBackgroundSyncStore {
             queuedAt: queuedAt,
             typeKeys: Array(Set(typeKeys)).sorted()
         )
+        write(request)
+    }
+
+    static func merge(typeKeys: [String], queuedAt: Date = Date()) {
+        let existing = load()
+        let mergedTypeKeys = Array(Set(existing?.typeKeys ?? []).union(typeKeys)).sorted()
+        let request = PendingBackgroundSyncRequest(
+            queuedAt: existing?.queuedAt ?? queuedAt,
+            typeKeys: mergedTypeKeys
+        )
+        write(request)
+    }
+
+    static func hasPendingRequest() -> Bool {
+        load() != nil
+    }
+
+    private static func write(_ request: PendingBackgroundSyncRequest) {
         guard let data = try? JSONEncoder().encode(request) else { return }
         UserDefaults.standard.set(data, forKey: defaultsKey)
     }

@@ -8,12 +8,13 @@ struct SyncSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                networkCard
                 fallbackCard
                 backfillCard
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
-            .padding(.bottom, 14)
+            .padding(.bottom, NucleusStyle.floatingTabBarClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.hidden)
@@ -81,7 +82,49 @@ private extension SyncSettingsView {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(NucleusButtonStyle(kind: .secondary))
-                    .disabled(model.isSyncing)
+                    .disabled(model.isSyncing || model.isSyncPausedForNetwork)
+                }
+            }
+        }
+    }
+
+    var networkCard: some View {
+        NucleusCard("Network", systemImage: "wifi") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Network sync policy")
+                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                            .foregroundStyle(.primary)
+
+                        Text(model.networkSyncDetail)
+                            .font(.system(.footnote, design: .rounded))
+                            .foregroundStyle(Color.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    StatusPill(label: model.networkSyncStatus.label, kind: networkStatusKind, systemImage: networkStatusIcon)
+                }
+
+                NucleusInset {
+                    Toggle(isOn: Binding(
+                        get: { model.allowCellularSync },
+                        set: { model.setAllowCellularSync($0) }
+                    )) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Allow mobile data")
+                                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                                .foregroundStyle(.primary)
+
+                            Text(networkPolicyNote)
+                                .font(.system(.footnote, design: .rounded))
+                                .foregroundStyle(Color.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .tint(NucleusPalette.accent)
                 }
             }
         }
@@ -119,9 +162,42 @@ private extension SyncSettingsView {
                         }
                     }
                     .buttonStyle(.plain)
-                    .disabled(model.isSyncing)
+                    .disabled(model.isSyncing || model.isSyncPausedForNetwork)
                 }
             }
         }
+    }
+
+    var networkStatusKind: StatusPill.Kind {
+        switch model.networkSyncStatus {
+        case .wifi, .other:
+            .ok
+        case .unknown:
+            .warning
+        case .unavailable, .cellular:
+            .neutral
+        }
+    }
+
+    var networkStatusIcon: String {
+        switch model.networkSyncStatus {
+        case .wifi:
+            "wifi"
+        case .cellular:
+            "antenna.radiowaves.left.and.right"
+        case .unavailable:
+            "wifi.slash"
+        case .unknown:
+            "wifi.exclamationmark"
+        case .other:
+            "network"
+        }
+    }
+
+    var networkPolicyNote: String {
+        if model.allowCellularSync {
+            return "Sync can run on Wi-Fi or mobile data. Low Data Mode still blocks uploads."
+        }
+        return "Mobile data is held as a pending sync and resumes automatically on Wi-Fi or another non-cellular connection."
     }
 }

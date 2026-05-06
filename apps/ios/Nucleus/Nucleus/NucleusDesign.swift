@@ -18,6 +18,8 @@ enum NucleusPalette {
 }
 
 enum NucleusStyle {
+    static let floatingTabBarClearance: CGFloat = 128
+
     static func surface(_ scheme: ColorScheme) -> Color {
         scheme == .dark
             ? Color(red: 0.14, green: 0.17, blue: 0.16).opacity(0.76)
@@ -40,6 +42,97 @@ enum NucleusStyle {
         scheme == .dark
             ? Color.black.opacity(0.30)
             : Color(red: 0.11, green: 0.14, blue: 0.13).opacity(0.10)
+    }
+}
+
+enum NucleusLiquidGlass {
+    static func surfaceTint(_ scheme: ColorScheme, strength: Double = 1) -> Color {
+        NucleusPalette.accent.opacity((scheme == .dark ? 0.070 : 0.045) * strength)
+    }
+
+    static func controlTint(_ scheme: ColorScheme, strength: Double = 1) -> Color {
+        NucleusPalette.accent.opacity((scheme == .dark ? 0.16 : 0.10) * strength)
+    }
+}
+
+struct NucleusGlassContainer<Content: View>: View {
+    private let spacing: CGFloat?
+    private let content: Content
+
+    init(spacing: CGFloat? = 20, @ViewBuilder content: () -> Content) {
+        self.spacing = spacing
+        self.content = content()
+    }
+
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) {
+                content
+            }
+        } else {
+            content
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func nucleusGlassRoundedEffect(cornerRadius: CGFloat, tint: Color, isInteractive: Bool = false) -> some View {
+        if #available(iOS 26.0, *) {
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            let glass = isInteractive ? Glass.regular.tint(tint).interactive() : Glass.regular.tint(tint)
+
+            self.glassEffect(glass, in: shape)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func nucleusGlassCapsuleEffect(tint: Color, isInteractive: Bool = false) -> some View {
+        if #available(iOS 26.0, *) {
+            let shape = Capsule(style: .continuous)
+            let glass = isInteractive ? Glass.regular.tint(tint).interactive() : Glass.regular.tint(tint)
+
+            self.glassEffect(glass, in: shape)
+        } else {
+            self
+        }
+    }
+}
+
+private struct NucleusGlassRoundedSurface: View {
+    let cornerRadius: CGFloat
+    let fill: Color
+    let materialOpacity: Double
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        shape
+            .fill(fill)
+            .overlay(
+                shape
+                    .fill(.ultraThinMaterial)
+                    .opacity(materialOpacity)
+            )
+    }
+}
+
+private struct NucleusGlassCapsuleSurface: View {
+    let fill: Color
+    let materialOpacity: Double
+
+    var body: some View {
+        let shape = Capsule(style: .continuous)
+
+        shape
+            .fill(fill)
+            .overlay(
+                shape
+                    .fill(.ultraThinMaterial)
+                    .opacity(materialOpacity)
+            )
     }
 }
 
@@ -267,6 +360,10 @@ struct NucleusCard<Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(NucleusCardBackground())
+        .nucleusGlassRoundedEffect(
+            cornerRadius: 26,
+            tint: NucleusLiquidGlass.surfaceTint(colorScheme, strength: 0.45)
+        )
     }
 }
 
@@ -284,13 +381,11 @@ struct NucleusCardBackground: View {
         let accentStroke = NucleusPalette.accent.opacity(colorScheme == .dark ? 0.10 : 0.05)
         let materialOpacity = colorScheme == .dark ? 0.18 : 0.42
 
-        shape
-            .fill(fill)
-            .overlay(
-                shape
-                    .fill(.ultraThinMaterial)
-                    .opacity(materialOpacity)
-            )
+        NucleusGlassRoundedSurface(
+            cornerRadius: cornerRadius,
+            fill: fill,
+            materialOpacity: materialOpacity
+        )
             .overlay(
                 shape
                     .fill(
@@ -346,10 +441,20 @@ struct NucleusInset<Content: View>: View {
         content
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(NucleusStyle.surfaceStrong(colorScheme), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background {
+                NucleusGlassRoundedSurface(
+                    cornerRadius: 18,
+                    fill: NucleusStyle.surfaceStrong(colorScheme),
+                    materialOpacity: colorScheme == .dark ? 0.10 : 0.20
+                )
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(NucleusStyle.stroke(colorScheme), lineWidth: 1)
+            )
+            .nucleusGlassRoundedEffect(
+                cornerRadius: 18,
+                tint: NucleusLiquidGlass.surfaceTint(colorScheme, strength: 0.35)
             )
     }
 }
@@ -440,13 +545,11 @@ struct SyncProgressOverlay: View {
         SyncProgressPanel(progress: progress)
             .padding(4)
             .background {
-                shape
-                    .fill(baseFill)
-                    .overlay(
-                        shape
-                            .fill(.ultraThinMaterial)
-                            .opacity(materialOpacity)
-                    )
+                NucleusGlassRoundedSurface(
+                    cornerRadius: 26,
+                    fill: baseFill,
+                    materialOpacity: materialOpacity
+                )
                     .overlay(
                         shape
                             .stroke(NucleusStyle.stroke(colorScheme), lineWidth: 1)
@@ -488,8 +591,11 @@ struct NucleusTerminal<Content: View>: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                shape
-                    .fill(colorScheme == .dark ? Color.black.opacity(0.24) : NucleusPalette.fog.opacity(0.82))
+                NucleusGlassRoundedSurface(
+                    cornerRadius: 18,
+                    fill: colorScheme == .dark ? Color.black.opacity(0.24) : NucleusPalette.fog.opacity(0.82),
+                    materialOpacity: colorScheme == .dark ? 0.08 : 0.16
+                )
                     .overlay(
                         shape
                             .fill(
@@ -523,8 +629,11 @@ struct NucleusTileBackground: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
 
-        shape
-            .fill(NucleusStyle.surfaceStrong(colorScheme))
+        NucleusGlassRoundedSurface(
+            cornerRadius: 20,
+            fill: NucleusStyle.surfaceStrong(colorScheme),
+            materialOpacity: colorScheme == .dark ? 0.10 : 0.18
+        )
             .overlay(
                 shape
                     .fill(
@@ -586,7 +695,12 @@ struct StatusPill: View {
         .foregroundStyle(foreground)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(background, in: Capsule(style: .continuous))
+        .background {
+            NucleusGlassCapsuleSurface(
+                fill: background,
+                materialOpacity: colorScheme == .dark ? 0.08 : 0.14
+            )
+        }
         .overlay(
             Capsule(style: .continuous)
                 .fill(
@@ -603,6 +717,7 @@ struct StatusPill: View {
             Capsule(style: .continuous)
                 .stroke(border, lineWidth: 1)
         )
+        .nucleusGlassCapsuleEffect(tint: tint)
         .shadow(color: colorScheme == .dark ? Color.black.opacity(0.10) : Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
     }
 
@@ -630,6 +745,15 @@ struct StatusPill: View {
         case .neutral: NucleusStyle.stroke(colorScheme)
         case .warning: NucleusPalette.warning.opacity(0.18)
         case .error: NucleusPalette.danger.opacity(0.18)
+        }
+    }
+
+    private var tint: Color {
+        switch kind {
+        case .ok: NucleusPalette.accent.opacity(colorScheme == .dark ? 0.20 : 0.14)
+        case .neutral: NucleusLiquidGlass.surfaceTint(colorScheme, strength: 0.8)
+        case .warning: NucleusPalette.warning.opacity(colorScheme == .dark ? 0.18 : 0.12)
+        case .error: NucleusPalette.danger.opacity(colorScheme == .dark ? 0.18 : 0.12)
         }
     }
 }
@@ -765,6 +889,11 @@ struct NucleusButtonStyle: ButtonStyle {
             .overlay {
                 shape.stroke(border(configuration), lineWidth: 1)
             }
+            .nucleusGlassRoundedEffect(
+                cornerRadius: cornerRadius,
+                tint: NucleusLiquidGlass.controlTint(colorScheme, strength: kind == .primary ? 0.85 : 0.55),
+                isInteractive: kind != .ghost
+            )
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
     }
@@ -784,8 +913,13 @@ struct NucleusButtonStyle: ButtonStyle {
     private func background(_ configuration: Configuration, shape: RoundedRectangle) -> some View {
         switch kind {
         case .primary:
-            shape
-                .fill(
+            NucleusGlassRoundedSurface(
+                cornerRadius: 16,
+                fill: NucleusPalette.accent.opacity(configuration.isPressed ? 0.82 : 0.94),
+                materialOpacity: colorScheme == .dark ? 0.12 : 0.18
+            )
+                .overlay(
+                    shape.fill(
                     LinearGradient(
                         colors: [
                             NucleusPalette.accent.opacity(configuration.isPressed ? 0.84 : 0.96),
@@ -794,6 +928,8 @@ struct NucleusButtonStyle: ButtonStyle {
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
+                    )
+                    .opacity(colorScheme == .dark ? 0.74 : 0.68)
                 )
                 .overlay(
                     shape
@@ -814,8 +950,11 @@ struct NucleusButtonStyle: ButtonStyle {
                 .shadow(color: NucleusPalette.accent.opacity(configuration.isPressed ? 0.04 : 0.10), radius: 10, x: 0, y: 6)
                 .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 10, x: 0, y: 6)
         case .secondary:
-            shape
-                .fill(NucleusStyle.surfaceStrong(colorScheme).opacity(configuration.isPressed ? 0.88 : 1.0))
+            NucleusGlassRoundedSurface(
+                cornerRadius: 16,
+                fill: NucleusStyle.surfaceStrong(colorScheme).opacity(configuration.isPressed ? 0.88 : 1.0),
+                materialOpacity: colorScheme == .dark ? 0.10 : 0.18
+            )
                 .overlay(
                     shape
                         .fill(
@@ -869,7 +1008,13 @@ struct NucleusInlineStat: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NucleusStyle.surfaceStrong(colorScheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background {
+            NucleusGlassRoundedSurface(
+                cornerRadius: 16,
+                fill: NucleusStyle.surfaceStrong(colorScheme),
+                materialOpacity: colorScheme == .dark ? 0.08 : 0.16
+            )
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(NucleusStyle.stroke(colorScheme), lineWidth: 1)
@@ -879,6 +1024,7 @@ struct NucleusInlineStat: View {
 
 struct NucleusErrorCallout: View {
     let message: String
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -892,7 +1038,13 @@ struct NucleusErrorCallout: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
-        .background(NucleusPalette.danger.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background {
+            NucleusGlassRoundedSurface(
+                cornerRadius: 14,
+                fill: NucleusPalette.danger.opacity(0.12),
+                materialOpacity: colorScheme == .dark ? 0.06 : 0.12
+            )
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(NucleusPalette.danger.opacity(0.18), lineWidth: 1)
@@ -902,6 +1054,7 @@ struct NucleusErrorCallout: View {
 
 struct NucleusWarningCallout: View {
     let message: String
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -915,7 +1068,13 @@ struct NucleusWarningCallout: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
-        .background(NucleusPalette.warning.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background {
+            NucleusGlassRoundedSurface(
+                cornerRadius: 14,
+                fill: NucleusPalette.warning.opacity(0.14),
+                materialOpacity: colorScheme == .dark ? 0.06 : 0.12
+            )
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(NucleusPalette.warning.opacity(0.18), lineWidth: 1)
@@ -925,6 +1084,7 @@ struct NucleusWarningCallout: View {
 
 struct NucleusSuccessCallout: View {
     let message: String
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -938,7 +1098,13 @@ struct NucleusSuccessCallout: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
-        .background(NucleusPalette.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background {
+            NucleusGlassRoundedSurface(
+                cornerRadius: 14,
+                fill: NucleusPalette.accent.opacity(0.12),
+                materialOpacity: colorScheme == .dark ? 0.06 : 0.12
+            )
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(NucleusPalette.accent.opacity(0.18), lineWidth: 1)
